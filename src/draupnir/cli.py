@@ -63,8 +63,8 @@ def main() -> int:
     if args.generate_all:
         if args.check:
             return cmd_check(standards_dir, output_dir)
-        return cmd_generate_all(standards_dir, output_dir)
+        return cmd_generate_all(standards_dir, output_dir, workspace)
     if args.name:
-        return cmd_generate_one(args.name, standards_dir, output_dir)
+        return cmd_generate_one(args.name, standards_dir, output_dir, workspace)
     parser.print_help()
     return 1

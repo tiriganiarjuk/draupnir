@@ -7,7 +7,11 @@ Each function implements one CLI command, returning an exit code.
 import sys
 from pathlib import Path
 
-from draupnir.functions.impure.writers import serialize_schema, write_schema
+from draupnir.functions.impure.writers import (
+    serialize_schema,
+    write_schema,
+    write_sidecar,
+)
 from draupnir.functions.impure.pipeline import (
     discover_schema_paths,
     generate_all_schemas,
@@ -34,28 +38,39 @@ def cmd_list(standards_dir: Path) -> int:
 
 
 def cmd_generate_one(
-    name: str, standards_dir: Path, output_dir: Path,
+    name: str,
+    standards_dir: Path,
+    output_dir: Path,
+    workspace_root: Path,
 ) -> int:
-    """Generate a single schema."""
+    """Generate a single schema with HTML sidecar."""
     schema_name = name.removesuffix(".yaml")
     schema_path = standards_dir / "schema" / f"{schema_name}.yaml"
     if not schema_path.exists():
         sys.stderr.write(f"draupnir: not found: {schema_path}\n")
         return 1
     doc = generate_schema(schema_path, standards_dir)
-    write_schema(doc, output_dir / f"{schema_name}.schema.json")
+    out = output_dir / f"{schema_name}.schema.json"
+    write_schema(doc, out)
+    write_sidecar(out, workspace_root)
     sys.stdout.write(f"wrote {schema_name}.schema.json\n")
     return 0
 
 
-def cmd_generate_all(standards_dir: Path, output_dir: Path) -> int:
-    """Generate all schemas."""
+def cmd_generate_all(
+    standards_dir: Path,
+    output_dir: Path,
+    workspace_root: Path,
+) -> int:
+    """Generate all schemas with HTML sidecars."""
     schemas = generate_all_schemas(standards_dir)
     if not schemas:
         sys.stderr.write("draupnir: no schemas found\n")
         return 1
     for name, doc in schemas.items():
-        write_schema(doc, output_dir / f"{name}.schema.json")
+        out = output_dir / f"{name}.schema.json"
+        write_schema(doc, out)
+        write_sidecar(out, workspace_root)
         sys.stdout.write(f"wrote {name}.schema.json\n")
     return 0
 

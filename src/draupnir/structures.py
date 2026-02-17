@@ -8,6 +8,10 @@ Model.model_validate(yaml_dict) works directly. Pydantic aliases handle
 YAML keys that aren't valid Python identifiers (e.g., $ref, not).
 """
 
+from collections.abc import Callable
+from pathlib import PurePosixPath
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -236,6 +240,27 @@ class RawSchema(BaseModel):
 
 
 # =============================================================================
+# LOADER INTERFACE (typed callables for the walker — no Any, no unsafe)
+# =============================================================================
+
+
+class SchemaLoaders(BaseModel):
+    """Typed loader callables for each composition level.
+
+    Each loader takes a PurePosixPath and returns a validated
+    Pydantic model. Validation happens inside the loader (at the
+    impure boundary), so the walker never sees untyped data.
+    """
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    composed: Callable[[PurePosixPath], "RawComposed"]
+    group: Callable[[PurePosixPath], "RawGroup"]
+    array: Callable[[PurePosixPath], "RawArray"]
+    section: Callable[[PurePosixPath], "RawSection"]
+
+
+# =============================================================================
 # WALKED TYPES (after tree walking — Phase 3 walker produces these)
 # =============================================================================
 
@@ -304,7 +329,7 @@ class ResolvedField(BaseModel):
     pattern: str | None = None
     enum_values: tuple[str, ...] | None = None
     description: str | None = None
-    requirement: str | None = None
+    requirement: str | RequirementCondition | None = None
     default: str | bool | int | None = None
     minimum: int | None = None
     not_ref: str | None = None  # blocklist reference name
@@ -367,3 +392,166 @@ class ResolvedSchema(BaseModel):
     required_sections: tuple[str, ...] = ()
     optional_sections: tuple[str, ...] = ()
     sections: tuple[ResolvedSection, ...] = ()
+
+
+# =============================================================================
+# JSON SCHEMA OUTPUT TYPES (Phase 3 builder produces these)
+# =============================================================================
+# These model the JSON Schema output format. Each model serializes to the
+# correct JSON Schema fragment via model_dump(by_alias=True, exclude_none=True).
+
+
+class SchemaConst(BaseModel):
+    """JSON Schema const constraint: {"const": "value"}."""
+
+    model_config = ConfigDict(frozen=True)
+
+    const: str
+
+
+class SchemaEnumConstraint(BaseModel):
+    """JSON Schema enum constraint: {"enum": ["a", "b"]}."""
+
+    model_config = ConfigDict(frozen=True)
+
+    enum: tuple[str, ...]
+
+
+class SchemaCondition(BaseModel):
+    """Body of an if/then/else clause in JSON Schema.
+
+    Used for conditional requirements. The properties dict values
+    are constraints (const/enum) or Literal[False] for prohibition.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    required: tuple[str, ...] | None = None
+    properties: (
+        dict[str, SchemaConst | SchemaEnumConstraint | Literal[False]] | None
+    ) = None
+
+
+class SchemaConditional(BaseModel):
+    """JSON Schema if/then/else conditional construct."""
+
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
+
+    if_: SchemaCondition = Field(alias="if")
+    then_: SchemaCondition = Field(alias="then")
+    else_: SchemaCondition | None = Field(default=None, alias="else")
+
+
+class SchemaNotRef(BaseModel):
+    """x-not extension referencing a blocklist: {"$ref": "NAME"}."""
+
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
+
+    ref: str = Field(alias="$ref")
+
+
+class SchemaSemanticExt(BaseModel):
+    """x-semantic extension for quality/semantic checks.
+
+    Uses None (not empty tuple) so exclude_none=True omits absent fields.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    intent: str
+    severity: str
+    checks: tuple[str, ...] | None = None
+    anti_patterns: tuple[str, ...] | None = None
+
+
+class SchemaField(BaseModel):
+    """JSON Schema property for a leaf field.
+
+    Serializes to: {type, description?, format?, pattern?, enum?,
+    default?, minimum?, x-validation?, x-not?, x-semantic?}
+    """
+
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
+
+    type: str
+    description: str | None = None
+    format: str | None = None
+    pattern: str | None = None
+    enum: tuple[str, ...] | None = None
+    default: str | bool | int | None = None
+    minimum: int | None = None
+    x_validation: ValidationConstraint | None = Field(
+        default=None, alias="x-validation",
+    )
+    x_not: SchemaNotRef | None = Field(default=None, alias="x-not")
+    x_semantic: SchemaSemanticExt | None = Field(
+        default=None, alias="x-semantic",
+    )
+
+
+class SchemaObject(BaseModel):
+    """JSON Schema object property (groups and sections).
+
+    Serializes to: {type: "object", properties, required?,
+    additionalProperties?, allOf?, minProperties?}
+    """
+
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
+
+    type: str = "object"
+    description: str | None = None
+    properties: dict[
+        str, "SchemaField | SchemaObject | SchemaArray"
+    ] = Field(default_factory=dict)
+    required: tuple[str, ...] | None = None
+    additional_properties: bool | None = Field(
+        default=None, alias="additionalProperties",
+    )
+    all_of: tuple[SchemaConditional, ...] | None = Field(
+        default=None, alias="allOf",
+    )
+    min_properties: int | None = Field(
+        default=None, alias="minProperties",
+    )
+
+
+class SchemaOneOf(BaseModel):
+    """oneOf wrapper for polymorphic array items."""
+
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
+
+    one_of: tuple[SchemaObject, ...] = Field(alias="oneOf")
+
+
+class SchemaArray(BaseModel):
+    """JSON Schema array property.
+
+    Items is either a single SchemaObject or a SchemaOneOf wrapper.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    type: str = "array"
+    description: str | None = None
+    items: SchemaObject | SchemaOneOf
+
+
+class SchemaDocument(BaseModel):
+    """Complete JSON Schema document (root output).
+
+    Serializes to the top-level JSON Schema with $schema, $id, title,
+    description, type, required, properties, additionalProperties.
+    """
+
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
+
+    schema_uri: str = Field(alias="$schema")
+    schema_id: str = Field(alias="$id")
+    title: str
+    description: str
+    type: str = "object"
+    required: tuple[str, ...] | None = None
+    properties: dict[str, SchemaObject] = Field(default_factory=dict)
+    additional_properties: bool | None = Field(
+        default=None, alias="additionalProperties",
+    )

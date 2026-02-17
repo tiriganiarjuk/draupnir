@@ -1,14 +1,21 @@
-"""Tests for draupnir.unsafe.impure.validators — boundary validation."""
+"""Tests for draupnir.functions.impure.loaders — boundary validation.
+
+These test the validation behavior (valid data → model, invalid data → error)
+using Pydantic model_validate directly, since the loaders combine IO + validation.
+Integration tests cover the full load-from-file path.
+"""
 
 import pytest
 
-from draupnir.unsafe.impure.validators import (
-    validate_array,
-    validate_composed,
-    validate_group,
-    validate_primitive,
-    validate_schema,
-    validate_section,
+from pydantic import ValidationError
+
+from draupnir.structures import (
+    RawArray,
+    RawComposed,
+    RawGroup,
+    RawPrimitive,
+    RawSchema,
+    RawSection,
 )
 
 
@@ -20,12 +27,12 @@ class TestValidatePrimitive:
             "requirement": "mandatory",
             "description": "Agent identifier.",
         }
-        p = validate_primitive(data)
+        p = RawPrimitive.model_validate(data)
         assert p.name == "agent_name"
 
-    def test_invalid_raises_with_source(self) -> None:
-        with pytest.raises(ValueError, match="test.yaml"):
-            validate_primitive({"name": "bad"}, source="test.yaml")
+    def test_invalid_raises(self) -> None:
+        with pytest.raises(ValidationError):
+            RawPrimitive.model_validate({"name": "bad"})
 
     def test_conditional_requirement(self) -> None:
         data = {
@@ -41,7 +48,7 @@ class TestValidatePrimitive:
             },
             "description": "Max concurrent agents.",
         }
-        p = validate_primitive(data)
+        p = RawPrimitive.model_validate(data)
         assert not isinstance(p.requirement, str)
 
 
@@ -53,7 +60,7 @@ class TestValidateComposed:
             "requirement": "required",
             "description": "Path.",
         }
-        c = validate_composed(data)
+        c = RawComposed.model_validate(data)
         assert c.type == "path_allowed_any"
 
     def test_blocklist(self) -> None:
@@ -65,13 +72,13 @@ class TestValidateComposed:
                 {"$ref": "path_forbidden_home"},
             ],
         }
-        c = validate_composed(data)
+        c = RawComposed.model_validate(data)
         assert c.imports is not None
         assert len(c.imports) == 2
 
     def test_invalid_raises(self) -> None:
-        with pytest.raises(ValueError):
-            validate_composed({})
+        with pytest.raises(ValidationError):
+            RawComposed.model_validate({})
 
 
 class TestValidateGroup:
@@ -81,7 +88,7 @@ class TestValidateGroup:
             "type": "object",
             "fields": {"f1": "composed_f1"},
         }
-        g = validate_group(data)
+        g = RawGroup.model_validate(data)
         assert g.name == "test_group"
 
 
@@ -92,7 +99,7 @@ class TestValidateArray:
             "type": "array",
             "items": {"$ref": "some_item"},
         }
-        a = validate_array(data)
+        a = RawArray.model_validate(data)
         assert a.items.ref == "some_item"
 
     def test_list_form(self) -> None:
@@ -101,7 +108,7 @@ class TestValidateArray:
             "type": "array",
             "items": [{"$ref": "item_type"}],
         }
-        a = validate_array(data)
+        a = RawArray.model_validate(data)
         assert isinstance(a.items, tuple)
         assert a.items[0].ref == "item_type"
 
@@ -113,7 +120,7 @@ class TestValidateSection:
             "type": "object",
             "sub_components": {"paths": "groups/paths.yaml"},
         }
-        s = validate_section(data)
+        s = RawSection.model_validate(data)
         assert len(s.sub_components) == 1
 
 
@@ -126,9 +133,9 @@ class TestValidateSchema:
             "sections": {"security": "sections/security.yaml"},
             "required_sections": ["security"],
         }
-        s = validate_schema(data)
+        s = RawSchema.model_validate(data)
         assert s.version == 3
 
-    def test_invalid_raises_with_source(self) -> None:
-        with pytest.raises(ValueError, match="schema.yaml"):
-            validate_schema({"name": "bad"}, source="schema.yaml")
+    def test_invalid_raises(self) -> None:
+        with pytest.raises(ValidationError):
+            RawSchema.model_validate({"name": "bad"})

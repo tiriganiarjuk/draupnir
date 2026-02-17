@@ -2,6 +2,10 @@
 
 All models are frozen (immutable) and contain NO methods.
 All logic lives in standalone functions in other modules.
+
+YAML shape matching: Raw models mirror the YAML structure exactly so that
+Model.model_validate(yaml_dict) works directly. Pydantic aliases handle
+YAML keys that aren't valid Python identifiers (e.g., $ref, not).
 """
 
 from __future__ import annotations
@@ -10,12 +14,15 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 # =============================================================================
-# CONSTRAINT MODELS (embedded within primitives)
+# SUB-STRUCTURE MODELS (nested within higher-level YAML)
 # =============================================================================
 
 
 class ValidationConstraint(BaseModel):
-    """Filesystem existence check attached to a primitive."""
+    """Filesystem existence check attached to a primitive.
+
+    YAML shape: {instruction: str, severity: str}
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -24,7 +31,10 @@ class ValidationConstraint(BaseModel):
 
 
 class SemanticConstraint(BaseModel):
-    """Quality/semantic check attached to a primitive."""
+    """Quality/semantic check attached to a primitive.
+
+    YAML shape: {intent: str, checks: [str], anti_patterns: [str], severity: str}
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -32,6 +42,66 @@ class SemanticConstraint(BaseModel):
     checks: tuple[str, ...] = ()
     anti_patterns: tuple[str, ...] = ()
     severity: str
+
+
+class ConditionalRequirement(BaseModel):
+    """Conditional requirement — field required only when another field matches.
+
+    YAML shape: {only_when: {field: str, equals?: str, in?: [str], present?: bool}}
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    field: str
+    equals: str | None = None
+    present: bool | None = None
+    in_values: tuple[str, ...] | None = Field(default=None, alias="in")
+
+
+class RequirementCondition(BaseModel):
+    """Wrapper for the only_when conditional requirement.
+
+    YAML shape: {only_when: ConditionalRequirement}
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    only_when: ConditionalRequirement
+
+
+class NotConstraint(BaseModel):
+    """JSON Schema 'not' constraint referencing a blocklist.
+
+    YAML shape: {$ref: PATH_BLOCKLIST}
+    """
+
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
+
+    ref: str = Field(alias="$ref")  # e.g., "PATH_BLOCKLIST"
+
+
+class RefString(BaseModel):
+    """A single $ref reference.
+
+    YAML shape: {$ref: some_name}
+    """
+
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
+
+    ref: str = Field(alias="$ref")
+
+
+class ArrayItems(BaseModel):
+    """Items definition for an array.
+
+    YAML shape 1 (single ref): {$ref: context_item}
+    YAML shape 2 (explicit union): {oneOf: [{$ref: entry}, {$ref: include}]}
+    """
+
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
+
+    ref: str | None = Field(default=None, alias="$ref")
+    one_of: tuple[RefString, ...] | None = Field(default=None, alias="oneOf")
 
 
 # =============================================================================
@@ -44,20 +114,25 @@ class RawPrimitive(BaseModel):
 
     Primitives are the type system — no variants, no collisions.
     Referenced by name from composed fields (type adoption).
+
+    Requirement can be a string ("mandatory", "required", "optional",
+    "inherit") or a conditional dict ({only_when: ...}).
+    Some primitives use const instead of description.
     """
 
     model_config = ConfigDict(frozen=True, populate_by_name=True)
 
     name: str
     type: str  # parent primitive name or json type ("string", "integer", "boolean")
-    requirement: str  # "mandatory", "required", "optional", "inherit"
-    description: str
+    requirement: str | RequirementCondition
+    description: str | None = None
+    const: str | None = None  # fixed value (e.g., return_metrics)
     format: str | None = None
     pattern: str | None = None
     enum: tuple[str, ...] | None = None
     default: str | bool | int | None = None
     minimum: int | None = None
-    not_ref: str | None = None  # e.g., "PATH_BLOCKLIST" (from not.$ref)
+    not_constraint: NotConstraint | None = Field(default=None, alias="not")
     validation: ValidationConstraint | None = None
     semantic: SemanticConstraint | None = None
 
@@ -65,23 +140,27 @@ class RawPrimitive(BaseModel):
 class RawComposed(BaseModel):
     """Composed field as loaded from YAML.
 
-    Two shapes:
+    Three shapes:
     - Thin: adopts a primitive type (type = primitive name).
     - Structural: an object with its own fields (type = "object").
+    - Blocklist: pattern composition (imports list of $refs, no type field).
 
+    Requirement can be string or conditional dict.
     The name field is the STABLE JSON field name — never changes per stage.
     """
 
     model_config = ConfigDict(frozen=True)
 
     name: str
-    type: str  # primitive name (thin) or "object" (structural)
-    requirement: str | None = None
+    type: str | None = None  # primitive name, "object", or absent (blocklist)
+    requirement: str | RequirementCondition | None = None
     description: str | None = None
     # Structural composed only (type == "object"):
     composition: str | None = None  # "AllOf", "OneOf"
     additional_properties: bool | None = None
     fields: dict[str, str] | None = None  # field_name → primitive type name
+    # Blocklist pattern (no type field):
+    imports: tuple[RefString, ...] | None = None
 
 
 class RawGroup(BaseModel):
@@ -107,8 +186,10 @@ class RawGroup(BaseModel):
 class RawArray(BaseModel):
     """Array with typed items. Also covers superarrays.
 
-    Items reference groups/supergroups by file path.
-    Single ref = one item type. Multiple refs = oneOf union.
+    Items can be:
+    - A dict with $ref (single type): {$ref: context_item}
+    - A dict with oneOf (union): {oneOf: [{$ref: a}, {$ref: b}]}
+    - A list of $ref dicts (reduced form): [{$ref: name}]
     """
 
     model_config = ConfigDict(frozen=True)
@@ -116,7 +197,7 @@ class RawArray(BaseModel):
     name: str
     type: str  # "array"
     description: str | None = None
-    items_refs: tuple[str, ...]  # file path(s) to item type(s)
+    items: ArrayItems | tuple[RefString, ...]
 
 
 class RawSection(BaseModel):

@@ -8,11 +8,14 @@ from pathlib import Path, PurePosixPath
 
 from draupnir.functions.impure.loaders import (
     load_all_primitives,
+    load_blocklist_composed,
+    load_composed_type_adopters,
     load_schema,
     make_schema_loaders,
 )
 from draupnir.functions.pure.builders import build_schema_document
 from draupnir.functions.pure.resolvers import (
+    build_blocklists,
     build_primitives_pool,
     build_schema_sections_dict,
     resolve_walked_schema,
@@ -36,7 +39,11 @@ def generate_schema(
     6. Build JSON Schema output models (pure)
     """
     primitives = load_all_primitives(toolcompose_root / "primitives")
-    pool = build_primitives_pool(primitives)
+    adopters = load_composed_type_adopters(toolcompose_root / "composed")
+    pool = build_primitives_pool(primitives + adopters)
+
+    blocklist_composed = load_blocklist_composed(toolcompose_root / "composed")
+    blocklists = build_blocklists(blocklist_composed, pool)
 
     raw_schema = load_schema(schema_path)
     raw_schema = bridge_schema_sections(raw_schema)
@@ -44,7 +51,7 @@ def generate_schema(
     loaders = make_schema_loaders(toolcompose_root)
     walked = walk_schema(raw_schema, PurePosixPath(""), loaders)
 
-    resolved = resolve_walked_schema(walked, pool)
+    resolved = resolve_walked_schema(walked, pool, blocklists)
     return build_schema_document(resolved)
 
 

@@ -2,6 +2,7 @@
 
 from draupnir.structures import (
     ConditionalRequirement,
+    ForbiddenEntry,
     ResolvedArray,
     ResolvedField,
     ResolvedGroup,
@@ -19,15 +20,22 @@ from draupnir.functions.pure.builders import (
     build_condition_if_clause,
     build_field,
     build_group,
-    build_not_ref,
+    build_nested_forbidden,
+    build_nested_property,
+    build_nested_required,
+    build_not_block,
     build_only_when_conditional,
+    build_root_conditional,
+    build_root_if_clause,
     build_schema_document,
     build_section,
     build_semantic_ext,
     classify_array_requirement,
     classify_field_requirement,
+    collect_deferred_conditionals,
     is_cross_group_conditional,
     is_field_required,
+    scan_group_for_deferred,
 )
 
 
@@ -90,14 +98,16 @@ class TestBuildField:
         assert result.x_validation is not None
         assert result.x_validation.instruction == "Must exist on filesystem."
 
-    def test_not_ref_extension(self) -> None:
+    def test_not_block_extension(self) -> None:
+        entries = (ForbiddenEntry(name="path_forbidden_root", const="/"),)
         field = ResolvedField(
             name="path", json_type="string",
-            not_ref="PATH_BLOCKLIST",
+            not_entries=entries,
         )
         result = build_field(field)
         assert result.x_not is not None
-        assert result.x_not.ref == "PATH_BLOCKLIST"
+        assert result.x_not.forbidden[0].name == "path_forbidden_root"
+        assert result.x_not.forbidden[0].const == "/"
 
     def test_semantic_extension(self) -> None:
         sc = SemanticConstraint(
@@ -120,14 +130,16 @@ class TestBuildField:
 # =============================================================================
 
 
-class TestBuildNotRef:
+class TestBuildNotBlock:
     def test_none_input(self) -> None:
-        assert build_not_ref(None) is None
+        assert build_not_block(None) is None
 
-    def test_string_input(self) -> None:
-        result = build_not_ref("PATH_BLOCKLIST")
+    def test_with_entries(self) -> None:
+        entries = (ForbiddenEntry(name="path_forbidden_root", const="/"),)
+        result = build_not_block(entries)
         assert result is not None
-        assert result.ref == "PATH_BLOCKLIST"
+        assert len(result.forbidden) == 1
+        assert result.forbidden[0].name == "path_forbidden_root"
 
 
 class TestBuildSemanticExt:
@@ -649,7 +661,7 @@ class TestBuildSchemaDocument:
         )
         doc = build_schema_document(schema)
         assert doc.schema_uri == "https://json-schema.org/draft/2020-12/schema"
-        assert doc.schema_id == "agent-test"
+        assert doc.schema_id == "test-schema-v1"
         assert doc.title == "test"
         assert doc.description == "Test schema."
         assert doc.type == "object"
@@ -703,8 +715,199 @@ class TestBuildSchemaDocument:
         doc = build_schema_document(schema)
         dumped = doc.model_dump(by_alias=True, exclude_none=True)
         assert dumped["$schema"] == "https://json-schema.org/draft/2020-12/schema"
-        assert dumped["$id"] == "agent-test"
+        assert dumped["$id"] == "test-schema-v1"
         ws = dumped["properties"]["security"]["properties"]["paths"]["properties"]["workspace"]
         assert ws["type"] == "string"
         assert ws["format"] == "path_exists_absolute"
         assert ws["pattern"] == "^/"
+
+
+# =============================================================================
+# CROSS-SECTION CONDITIONALS
+# =============================================================================
+
+
+class TestNestedPathBuilders:
+    def test_nested_property_single_segment(self) -> None:
+        leaf = SchemaEnumConstraint(enum=("a", "b"))
+        result = build_nested_property(("mode",), leaf)
+        dumped = result.model_dump(exclude_none=True)
+        assert dumped["properties"]["mode"]["enum"] == ("a", "b")
+
+    def test_nested_property_three_segments(self) -> None:
+        leaf = SchemaConst(const="batch")
+        result = build_nested_property(("task", "return", "mode"), leaf)
+        dumped = result.model_dump(exclude_none=True)
+        inner = dumped["properties"]["task"]["properties"]["return"]["properties"]["mode"]
+        assert inner == {"const": "batch"}
+
+    def test_nested_required(self) -> None:
+        result = build_nested_required(("security", "io"), "output_kind")
+        dumped = result.model_dump(exclude_none=True)
+        inner = dumped["properties"]["security"]["properties"]["io"]
+        assert inner == {"required": ("output_kind",)}
+
+    def test_nested_forbidden(self) -> None:
+        result = build_nested_forbidden(("security", "io"), "output_kind")
+        dumped = result.model_dump(exclude_none=True)
+        inner = dumped["properties"]["security"]["properties"]["io"]
+        assert inner == {"properties": {"output_kind": False}}
+
+    def test_nested_required_empty_path(self) -> None:
+        result = build_nested_required((), "field_name")
+        dumped = result.model_dump(exclude_none=True)
+        assert dumped == {"required": ("field_name",)}
+
+    def test_nested_forbidden_empty_path(self) -> None:
+        result = build_nested_forbidden((), "field_name")
+        dumped = result.model_dump(exclude_none=True)
+        assert dumped == {"properties": {"field_name": False}}
+
+
+class TestRootIfClause:
+    def test_in_values(self) -> None:
+        cond = ConditionalRequirement(
+            field="task.return.return_mode",
+            in_values=("metrics-output", "output"),
+        )
+        result = build_root_if_clause(cond)
+        dumped = result.model_dump(exclude_none=True)
+        leaf = dumped["properties"]["task"]["properties"]["return"]["properties"]["return_mode"]
+        assert leaf["enum"] == ("metrics-output", "output")
+
+    def test_equals(self) -> None:
+        cond = ConditionalRequirement(
+            field="task.dispatch.mode", equals="batch",
+        )
+        result = build_root_if_clause(cond)
+        dumped = result.model_dump(exclude_none=True)
+        leaf = dumped["properties"]["task"]["properties"]["dispatch"]["properties"]["mode"]
+        assert leaf == {"const": "batch"}
+
+    def test_present(self) -> None:
+        cond = ConditionalRequirement(
+            field="task.return.return_mode", present=True,
+        )
+        result = build_root_if_clause(cond)
+        dumped = result.model_dump(exclude_none=True)
+        inner = dumped["properties"]["task"]["properties"]["return"]
+        assert inner == {"required": ("return_mode",)}
+
+
+class TestBuildRootConditional:
+    def test_full_root_conditional(self) -> None:
+        cond = ConditionalRequirement(
+            field="task.return.return_mode",
+            in_values=("metrics-output", "output"),
+        )
+        result = build_root_conditional(
+            cond, "security_io_output_kind", ("security", "security_io"),
+        )
+        dumped = result.model_dump(by_alias=True, exclude_none=True)
+        # if clause: nested to task.return.return_mode
+        if_leaf = dumped["if"]["properties"]["task"]["properties"]["return"]["properties"]["return_mode"]
+        assert if_leaf["enum"] == ("metrics-output", "output")
+        # then clause: security.security_io requires field
+        then_inner = dumped["then"]["properties"]["security"]["properties"]["security_io"]
+        assert then_inner == {"required": ("security_io_output_kind",)}
+        # else clause: security.security_io.field = false
+        else_inner = dumped["else"]["properties"]["security"]["properties"]["security_io"]
+        assert else_inner == {"properties": {"security_io_output_kind": False}}
+
+
+class TestCollectDeferredConditionals:
+    def _make_schema_with_cross_group(self) -> ResolvedSchema:
+        """Build a schema with one cross-section conditional field."""
+        cross_field = ResolvedField(
+            name="output_kind",
+            json_type="string",
+            requirement=RequirementCondition(
+                only_when=ConditionalRequirement(
+                    field="task.return.return_mode",
+                    in_values=("metrics-output", "output"),
+                ),
+            ),
+        )
+        io_group = ResolvedGroup(
+            name="security_io",
+            fields=(cross_field,),
+        )
+        section = ResolvedSection(
+            name="security",
+            components=(io_group,),
+        )
+        return ResolvedSchema(
+            name="test",
+            version=1,
+            description="Test.",
+            sections=(section,),
+        )
+
+    def test_deferred_collected(self) -> None:
+        schema = self._make_schema_with_cross_group()
+        result = collect_deferred_conditionals(schema)
+        assert len(result) == 1
+        dumped = result[0].model_dump(by_alias=True, exclude_none=True)
+        assert "if" in dumped
+        assert "then" in dumped
+        assert "else" in dumped
+
+    def test_deferred_in_schema_document(self) -> None:
+        schema = self._make_schema_with_cross_group()
+        doc = build_schema_document(schema)
+        dumped = doc.model_dump(by_alias=True, exclude_none=True)
+        assert "allOf" in dumped
+        assert len(dumped["allOf"]) == 1
+        cond = dumped["allOf"][0]
+        then_inner = cond["then"]["properties"]["security"]["properties"]["security_io"]
+        assert then_inner == {"required": ("output_kind",)}
+
+    def test_no_deferred_no_allof(self) -> None:
+        """Schema with no cross-group conditionals → no allOf."""
+        field = ResolvedField(name="path", json_type="string")
+        group = ResolvedGroup(name="paths", fields=(field,))
+        section = ResolvedSection(name="security", components=(group,))
+        schema = ResolvedSchema(
+            name="test", version=1, description="Test.",
+            sections=(section,),
+        )
+        doc = build_schema_document(schema)
+        dumped = doc.model_dump(by_alias=True, exclude_none=True)
+        assert "allOf" not in dumped
+
+    def test_scan_skips_local_conditionals(self) -> None:
+        """Local conditionals are NOT deferred."""
+        local_field = ResolvedField(
+            name="batch_size",
+            json_type="integer",
+            requirement=RequirementCondition(
+                only_when=ConditionalRequirement(
+                    field="dispatch_mode", equals="batch",
+                ),
+            ),
+        )
+        group = ResolvedGroup(name="dispatch", fields=(local_field,))
+        result = scan_group_for_deferred(group, ("task", "dispatch"))
+        assert len(result) == 0
+
+    def test_scan_finds_nested_subgroup(self) -> None:
+        """Cross-group conditional in a sub-group is found."""
+        cross_field = ResolvedField(
+            name="output_kind",
+            json_type="string",
+            requirement=RequirementCondition(
+                only_when=ConditionalRequirement(
+                    field="task.return.mode",
+                    in_values=("output",),
+                ),
+            ),
+        )
+        inner = ResolvedGroup(name="io", fields=(cross_field,))
+        outer = ResolvedGroup(
+            name="security_top", fields=(), sub_groups=(inner,),
+        )
+        result = scan_group_for_deferred(outer, ("security", "security_top"))
+        assert len(result) == 1
+        dumped = result[0].model_dump(by_alias=True, exclude_none=True)
+        then_path = dumped["then"]["properties"]["security"]["properties"]["security_top"]["properties"]["io"]
+        assert then_path == {"required": ("output_kind",)}

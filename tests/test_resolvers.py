@@ -3,6 +3,7 @@
 import pytest
 
 from draupnir.structures import (
+    BlocklistPool,
     ComposedArrayItems,
     NotConstraint,
     RawArray,
@@ -170,7 +171,7 @@ class TestCollectTypeChain:
 class TestResolveTypeChain:
     def test_single_level_properties(self) -> None:
         pool = _simple_pool()
-        result = resolve_type_chain("agent_name", pool)
+        result = resolve_type_chain("agent_name", pool, BlocklistPool())
         assert result.json_type == "string"
         assert result.pattern == "^[a-z0-9]+(-[a-z0-9]+)*$"
         assert result.description == "Agent identifier."
@@ -178,21 +179,21 @@ class TestResolveTypeChain:
     def test_two_level_override(self) -> None:
         """Shallowest format wins. Deeper pattern preserved."""
         pool = _make_pool()
-        result = resolve_type_chain("path_exists_absolute", pool)
+        result = resolve_type_chain("path_exists_absolute", pool, BlocklistPool())
         assert result.json_type == "string"
         assert result.format == "path_exists_absolute"  # shallow wins
         assert result.pattern == "^/"  # from deeper level
-        assert result.not_ref == "PATH_BLOCKLIST"  # from deeper
+        assert result.not_entries is None  # blocklists dict empty in test
         assert result.validation.severity == "error"  # from shallow
 
     def test_enum_preserved(self) -> None:
         pool = _make_pool()
-        result = resolve_type_chain("dispatch_mode", pool)
+        result = resolve_type_chain("dispatch_mode", pool, BlocklistPool())
         assert result.enum_values == ("batch", "full")
 
     def test_semantic_preserved(self) -> None:
         pool = _make_pool()
-        result = resolve_type_chain("instruction_text", pool)
+        result = resolve_type_chain("instruction_text", pool, BlocklistPool())
         assert result.semantic is not None
         assert result.semantic.intent == "Directs behavior."
 
@@ -204,17 +205,18 @@ class TestResolveTypeChain:
 
 class TestResolveThinComposed:
     def test_basic(self) -> None:
+        """Composed inherits, primitive carries the selector."""
         pool = _simple_pool()
         composed = RawComposed(
-            name="agent_name",
+            name="metadata_agent_name",
             type="agent_name",
-            requirement="mandatory",
+            requirement="inherit",
             description="The agent's name.",
         )
-        field = resolve_thin_composed(composed, pool)
-        assert field.name == "agent_name"
+        field = resolve_thin_composed(composed, pool, BlocklistPool())
+        assert field.name == "metadata_agent_name"
         assert field.json_type == "string"
-        assert field.requirement == "mandatory"
+        assert field.requirement == "mandatory"  # from primitive
         assert field.description == "The agent's name."  # composed overrides
 
     def test_composed_description_overrides_chain(self) -> None:
@@ -222,10 +224,10 @@ class TestResolveThinComposed:
         composed = RawComposed(
             name="workspace_path",
             type="path_exists_absolute",
-            requirement="required",
+            requirement="inherit",
             description="Workspace root.",
         )
-        field = resolve_thin_composed(composed, pool)
+        field = resolve_thin_composed(composed, pool, BlocklistPool())
         assert field.description == "Workspace root."  # from composed
         assert field.format == "path_exists_absolute"  # from chain
 
@@ -234,12 +236,13 @@ class TestResolveThinComposed:
         composed = RawComposed(
             name="workspace_path",
             type="path_exists_absolute",
-            requirement="required",
+            requirement="inherit",
         )
-        field = resolve_thin_composed(composed, pool)
+        field = resolve_thin_composed(composed, pool, BlocklistPool())
         assert field.description == "Path that must exist."  # from chain
 
     def test_conditional_requirement(self) -> None:
+        """Conditional on composed, inherit on primitive — one selector."""
         pool = _make_pool()
         cond = RequirementCondition(
             only_when=ConditionalRequirement(
@@ -248,10 +251,10 @@ class TestResolveThinComposed:
         )
         composed = RawComposed(
             name="batch_size",
-            type="dispatch_mode",
+            type="path_allowed_absolute",
             requirement=cond,
         )
-        field = resolve_thin_composed(composed, pool)
+        field = resolve_thin_composed(composed, pool, BlocklistPool())
         assert not isinstance(field.requirement, str)
 
 
@@ -259,7 +262,7 @@ class TestResolveStructuralFields:
     def test_resolves_field_dict(self) -> None:
         pool = _simple_pool()
         fields = resolve_structural_fields(
-            {"name_field": "agent_name"}, pool,
+            {"name_field": "agent_name"}, pool, {},
         )
         assert len(fields) == 1
         assert fields[0].name == "name_field"
@@ -275,18 +278,18 @@ class TestResolveWalkedGroup:
     def test_with_composed_fields(self) -> None:
         pool = _simple_pool()
         composed = RawComposed(
-            name="agent_name", type="agent_name",
-            requirement="mandatory",
+            name="metadata_name", type="agent_name",
+            requirement="inherit",
         )
         raw_group = RawGroup(
             name="test_group", type="object",
-            fields={"agent_name": "agent_name"},
+            fields={"metadata_name": "metadata_name"},
         )
         walked = WalkedGroup(
             raw=raw_group,
             composed_fields=(composed,),
         )
-        resolved = resolve_walked_group(walked, pool)
+        resolved = resolve_walked_group(walked, pool, BlocklistPool())
         assert resolved.name == "test_group"
         assert len(resolved.fields) == 1
         assert resolved.fields[0].json_type == "string"
@@ -294,8 +297,8 @@ class TestResolveWalkedGroup:
     def test_with_sub_groups(self) -> None:
         pool = _simple_pool()
         child_composed = RawComposed(
-            name="agent_name", type="agent_name",
-            requirement="mandatory",
+            name="metadata_name", type="agent_name",
+            requirement="inherit",
         )
         child_raw = RawGroup(name="child", type="object")
         child_walked = WalkedGroup(
@@ -305,7 +308,7 @@ class TestResolveWalkedGroup:
         parent_walked = WalkedGroup(
             raw=parent_raw, sub_groups=(child_walked,),
         )
-        resolved = resolve_walked_group(parent_walked, pool)
+        resolved = resolve_walked_group(parent_walked, pool, BlocklistPool())
         assert len(resolved.sub_groups) == 1
         assert resolved.sub_groups[0].name == "child"
 
@@ -319,7 +322,7 @@ class TestResolveWalkedGroup:
             required_fields=("agent_name",),
         )
         walked = WalkedGroup(raw=raw_group)
-        resolved = resolve_walked_group(walked, pool)
+        resolved = resolve_walked_group(walked, pool, BlocklistPool())
         assert resolved.description == "A test group."
         assert resolved.composition == "AllOf"
         assert resolved.additional_properties is True
@@ -335,7 +338,7 @@ class TestResolveWalkedArray:
             {"name": "entries", "type": "array", "items": {"$ref": "item"}},
         )
         walked = WalkedArray(raw=raw_array, items=(item_walked,))
-        resolved = resolve_walked_array(walked, pool)
+        resolved = resolve_walked_array(walked, pool, BlocklistPool())
         assert resolved.name == "entries"
         assert len(resolved.items) == 1
 
@@ -353,7 +356,7 @@ class TestResolveWalkedSection:
         walked = WalkedSection(
             raw=raw_section, components=(comp_walked,),
         )
-        resolved = resolve_walked_section(walked, pool)
+        resolved = resolve_walked_section(walked, pool, BlocklistPool())
         assert resolved.name == "security"
         assert len(resolved.components) == 1
         assert resolved.required_fields == ("paths",)
@@ -378,7 +381,7 @@ class TestResolveWalkedSectionWithArrays:
             raw=raw_section,
             arrays=(walked_array,),
         )
-        resolved = resolve_walked_section(walked, pool)
+        resolved = resolve_walked_section(walked, pool, BlocklistPool())
         assert len(resolved.arrays) == 1
         assert resolved.arrays[0].name == "success_criteria"
 
@@ -399,7 +402,7 @@ class TestResolveWalkedSectionWithArrays:
             components=(comp_walked,),
             arrays=(walked_array,),
         )
-        resolved = resolve_walked_section(walked, pool)
+        resolved = resolve_walked_section(walked, pool, BlocklistPool())
         assert len(resolved.components) == 1
         assert len(resolved.arrays) == 1
 
@@ -423,7 +426,7 @@ class TestResolveWalkedSchema:
         walked = WalkedSchema(
             raw=raw_schema, sections=(walked_section,),
         )
-        resolved = resolve_walked_schema(walked, pool)
+        resolved = resolve_walked_schema(walked, pool, BlocklistPool())
         assert resolved.name == "agent-definition"
         assert resolved.version == 3
         assert len(resolved.sections) == 1
@@ -440,7 +443,7 @@ class TestResolveComposedArrayItems:
         """$ref to primitive → ResolvedField with chain-resolved properties."""
         pool = _make_pool()
         items = ComposedArrayItems(ref="dispatch_mode")
-        result = resolve_composed_array_items(items, pool)
+        result = resolve_composed_array_items(items, pool, BlocklistPool())
         assert result.json_type == "string"
         assert result.enum_values == ("batch", "full")
 
@@ -448,7 +451,7 @@ class TestResolveComposedArrayItems:
         """type=integer → ResolvedField(json_type='integer')."""
         pool = _simple_pool()
         items = ComposedArrayItems(type="integer")
-        result = resolve_composed_array_items(items, pool)
+        result = resolve_composed_array_items(items, pool, BlocklistPool())
         assert result.json_type == "integer"
 
     def test_neither_raises(self) -> None:
@@ -456,7 +459,7 @@ class TestResolveComposedArrayItems:
         pool = _simple_pool()
         items = ComposedArrayItems()
         with pytest.raises(ValueError, match="neither"):
-            resolve_composed_array_items(items, pool)
+            resolve_composed_array_items(items, pool, BlocklistPool())
 
 
 class TestResolveComposedArray:
@@ -475,7 +478,7 @@ class TestResolveComposedArray:
                 intent="Boundary.", severity="error",
             ),
         )
-        result = resolve_composed_array(composed, pool)
+        result = resolve_composed_array(composed, pool, BlocklistPool())
         assert result.name == "guardrails_constraints"
         assert result.description == "Behavioral constraints."
         assert result.min_items == 1
@@ -494,11 +497,11 @@ class TestResolveComposedArray:
         composed = RawComposed(
             name="batch_sizes",
             type="array",
-            requirement="optional",
+            requirement="inherit",
             items=ComposedArrayItems(type="integer"),
             max_items=10,
         )
-        result = resolve_composed_array(composed, pool)
+        result = resolve_composed_array(composed, pool, BlocklistPool())
         assert result.name == "batch_sizes"
         from draupnir.structures import ResolvedField
         assert isinstance(result.items, ResolvedField)
@@ -519,7 +522,7 @@ class TestResolveComposedArray:
             requirement=cond,
             items=ComposedArrayItems(type="integer"),
         )
-        result = resolve_composed_array(composed, pool)
+        result = resolve_composed_array(composed, pool, BlocklistPool())
         assert isinstance(result.requirement, RequirementCondition)
 
     def test_no_items_raises(self) -> None:
@@ -528,10 +531,10 @@ class TestResolveComposedArray:
         composed = RawComposed(
             name="bad_array",
             type="array",
-            requirement="optional",
+            requirement="inherit",
         )
         with pytest.raises(ValueError, match="no items"):
-            resolve_composed_array(composed, pool)
+            resolve_composed_array(composed, pool, BlocklistPool())
 
     def test_name_stabilized(self) -> None:
         """Composed array name gets stabilized."""
@@ -539,10 +542,10 @@ class TestResolveComposedArray:
         composed = RawComposed(
             name="constraints_resolved",
             type="array",
-            requirement="optional",
+            requirement="inherit",
             items=ComposedArrayItems(type="string"),
         )
-        result = resolve_composed_array(composed, pool)
+        result = resolve_composed_array(composed, pool, BlocklistPool())
         assert result.name == "constraints"
 
 
@@ -561,7 +564,7 @@ class TestResolveGroupWithComposedArrays:
             raw=raw_group,
             composed_arrays=(composed_arr,),
         )
-        resolved = resolve_walked_group(walked, pool)
+        resolved = resolve_walked_group(walked, pool, BlocklistPool())
         assert len(resolved.arrays) == 1
         assert resolved.arrays[0].name == "constraints"
         assert resolved.arrays[0].requirement == "mandatory"
@@ -580,7 +583,7 @@ class TestResolveGroupWithComposedArrays:
         composed_arr = RawComposed(
             name="sizes",
             type="array",
-            requirement="optional",
+            requirement="inherit",
             items=ComposedArrayItems(type="integer"),
         )
         raw_group = RawGroup(name="parent", type="object")
@@ -589,7 +592,7 @@ class TestResolveGroupWithComposedArrays:
             arrays=(walked_array,),
             composed_arrays=(composed_arr,),
         )
-        resolved = resolve_walked_group(walked, pool)
+        resolved = resolve_walked_group(walked, pool, BlocklistPool())
         assert len(resolved.arrays) == 2
         names = {a.name for a in resolved.arrays}
         assert names == {"entries", "sizes"}
@@ -607,7 +610,7 @@ class TestNameStabilization:
             name="security_resolved", type="object",
         )
         walked = WalkedGroup(raw=raw_group)
-        resolved = resolve_walked_group(walked, pool)
+        resolved = resolve_walked_group(walked, pool, BlocklistPool())
         assert resolved.name == "security"
 
     def test_array_name_stabilized(self) -> None:
@@ -618,7 +621,7 @@ class TestNameStabilization:
             {"name": "entries_reduced", "type": "array", "items": {"$ref": "x"}},
         )
         walked = WalkedArray(raw=raw_array, items=(item_walked,))
-        resolved = resolve_walked_array(walked, pool)
+        resolved = resolve_walked_array(walked, pool, BlocklistPool())
         assert resolved.name == "entries"
 
     def test_section_name_stabilized(self) -> None:
@@ -627,7 +630,7 @@ class TestNameStabilization:
             name="criteria_resolved", type="object",
         )
         walked = WalkedSection(raw=raw_section)
-        resolved = resolve_walked_section(walked, pool)
+        resolved = resolve_walked_section(walked, pool, BlocklistPool())
         assert resolved.name == "criteria"
 
     def test_composed_name_stabilized(self) -> None:
@@ -635,9 +638,9 @@ class TestNameStabilization:
         composed = RawComposed(
             name="context_path_resolved",
             type="agent_name",
-            requirement="required",
+            requirement="inherit",
         )
-        field = resolve_thin_composed(composed, pool)
+        field = resolve_thin_composed(composed, pool, BlocklistPool())
         assert field.name == "context_path"
 
 

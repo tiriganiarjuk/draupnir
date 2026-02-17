@@ -9,6 +9,7 @@ model_dump(by_alias=True, exclude_none=True) at the writer boundary.
 
 from draupnir.structures import (
     ConditionalRequirement,
+    ForbiddenEntry,
     ResolvedArray,
     ResolvedField,
     ResolvedGroup,
@@ -22,9 +23,12 @@ from draupnir.structures import (
     SchemaDocument,
     SchemaEnumConstraint,
     SchemaField,
-    SchemaNotRef,
+    SchemaForbiddenEntry,
+    SchemaNestedPath,
+    SchemaNotBlock,
     SchemaObject,
     SchemaOneOf,
+    SchemaRootConditional,
     SchemaSemanticExt,
     SemanticConstraint,
     ValidationConstraint,
@@ -36,27 +40,61 @@ from draupnir.structures import (
 # =============================================================================
 
 
-def build_field(field: ResolvedField) -> SchemaField:
-    """Convert a ResolvedField to a SchemaField output model."""
+def build_field(
+    field: ResolvedField,
+) -> SchemaField | SchemaArray:
+    """Convert a ResolvedField to a SchemaField or SchemaArray.
+
+    Array-type primitives (json_type="array" with items_type) produce
+    a SchemaArray. All other fields produce a SchemaField.
+    """
+    if field.json_type == "array" and field.items_type is not None:
+        return build_field_array(field)
     return SchemaField(
         type=field.json_type,
         description=field.description,
+        const=field.const,
         format=field.format,
         pattern=field.pattern,
         enum=field.enum_values,
         default=field.default,
         minimum=field.minimum,
         x_validation=field.validation,
-        x_not=build_not_ref(field.not_ref),
+        x_not=build_not_block(field.not_entries),
         x_semantic=build_semantic_ext(field.semantic),
     )
 
 
-def build_not_ref(not_ref: str | None) -> SchemaNotRef | None:
-    """Convert a not_ref string to a SchemaNotRef, or None."""
-    if not_ref is None:
+def build_field_array(field: ResolvedField) -> SchemaArray:
+    """Convert an array-type ResolvedField to a SchemaArray."""
+    return SchemaArray(
+        description=field.description,
+        items=SchemaField(type=field.items_type),
+        min_items=field.min_items,
+        max_items=field.max_items,
+        unique_items=field.unique_items,
+        x_semantic=build_semantic_ext(field.semantic),
+    )
+
+
+def build_not_block(
+    entries: tuple[ForbiddenEntry, ...] | None,
+) -> SchemaNotBlock | None:
+    """Convert expanded forbidden entries to a SchemaNotBlock."""
+    if entries is None:
         return None
-    return SchemaNotRef(ref=not_ref)
+    return SchemaNotBlock(
+        forbidden=tuple(
+            SchemaForbiddenEntry(
+                name=e.name,
+                const=e.const,
+                enum=e.enum,
+                pattern=e.pattern,
+                description=e.description,
+            )
+            for e in entries
+        ),
+    )
 
 
 def build_semantic_ext(
@@ -183,6 +221,8 @@ def classify_array_requirement(
 def build_group(group: ResolvedGroup) -> SchemaObject:
     """Convert a ResolvedGroup to a SchemaObject output model."""
     properties, required, conditionals = collect_group_contents(group)
+    if group.composition == "AllOf" and not required:
+        required = list(properties.keys())
     return SchemaObject(
         description=group.description,
         properties=properties,
@@ -270,6 +310,8 @@ def build_section(section: ResolvedSection) -> SchemaObject:
         properties[arr.name] = build_array(arr)
         if arr.name in section.required_fields:
             required.append(arr.name)
+    if section.composition == "AllOf" and not required:
+        required = list(properties.keys())
     return SchemaObject(
         description=section.description,
         properties=properties,
@@ -277,6 +319,110 @@ def build_section(section: ResolvedSection) -> SchemaObject:
         additional_properties=False if not section.additional_properties else None,
         min_properties=1 if section.composition == "OneOf" else None,
     )
+
+
+# =============================================================================
+# CROSS-SECTION CONDITIONALS (deferred to schema root)
+# =============================================================================
+
+
+def collect_deferred_conditionals(
+    schema: ResolvedSchema,
+) -> tuple[SchemaRootConditional, ...]:
+    """Find cross-section conditionals and build root-level allOf."""
+    result: list[SchemaRootConditional] = []
+    for section in schema.sections:
+        for group in section.components:
+            result.extend(
+                scan_group_for_deferred(
+                    group, (section.name, group.name),
+                ),
+            )
+    return tuple(result)
+
+
+def scan_group_for_deferred(
+    group: ResolvedGroup,
+    path: tuple[str, ...],
+) -> list[SchemaRootConditional]:
+    """Scan a group tree for cross-section conditionals."""
+    result: list[SchemaRootConditional] = []
+    for field in group.fields:
+        if not isinstance(field.requirement, RequirementCondition):
+            continue
+        if not is_cross_group_conditional(field.requirement.only_when):
+            continue
+        result.append(build_root_conditional(
+            field.requirement.only_when, field.name, path,
+        ))
+    for sub in group.sub_groups:
+        result.extend(
+            scan_group_for_deferred(sub, path + (sub.name,)),
+        )
+    return result
+
+
+def build_root_conditional(
+    cond: ConditionalRequirement,
+    field_name: str,
+    field_path: tuple[str, ...],
+) -> SchemaRootConditional:
+    """Build a root-level if/then/else for a cross-section conditional."""
+    return SchemaRootConditional(
+        if_=build_root_if_clause(cond),
+        then_=build_nested_required(field_path, field_name),
+        else_=build_nested_forbidden(field_path, field_name),
+    )
+
+
+def build_root_if_clause(
+    cond: ConditionalRequirement,
+) -> SchemaNestedPath:
+    """Build the nested if-clause for a cross-section conditional."""
+    segments = tuple(cond.field.split("."))
+    if cond.in_values is not None:
+        leaf = SchemaEnumConstraint(enum=cond.in_values)
+        return build_nested_property(segments, leaf)
+    if cond.equals is not None:
+        leaf = SchemaConst(const=cond.equals)
+        return build_nested_property(segments, leaf)
+    return build_nested_required(segments[:-1], segments[-1])
+
+
+def build_nested_property(
+    segments: tuple[str, ...],
+    leaf: SchemaEnumConstraint | SchemaConst,
+) -> SchemaNestedPath:
+    """Wrap segments as nested properties with a constraint leaf."""
+    if len(segments) == 1:
+        return SchemaNestedPath(properties={segments[0]: leaf})
+    return SchemaNestedPath(properties={
+        segments[0]: build_nested_property(segments[1:], leaf),
+    })
+
+
+def build_nested_required(
+    segments: tuple[str, ...],
+    field_name: str,
+) -> SchemaNestedPath:
+    """Wrap segments as nested properties ending with required."""
+    if len(segments) == 0:
+        return SchemaNestedPath(required=(field_name,))
+    return SchemaNestedPath(properties={
+        segments[0]: build_nested_required(segments[1:], field_name),
+    })
+
+
+def build_nested_forbidden(
+    segments: tuple[str, ...],
+    field_name: str,
+) -> SchemaNestedPath:
+    """Wrap segments as nested properties ending with {field: false}."""
+    if len(segments) == 0:
+        return SchemaNestedPath(properties={field_name: False})
+    return SchemaNestedPath(properties={
+        segments[0]: build_nested_forbidden(segments[1:], field_name),
+    })
 
 
 # =============================================================================
@@ -289,12 +435,14 @@ def build_schema_document(schema: ResolvedSchema) -> SchemaDocument:
     properties: dict[str, SchemaObject] = {}
     for section in schema.sections:
         properties[section.name] = build_section(section)
+    deferred = collect_deferred_conditionals(schema)
     return SchemaDocument(
         schema_uri="https://json-schema.org/draft/2020-12/schema",
-        schema_id=f"agent-{schema.name}",
+        schema_id=f"{schema.name}-schema-v{schema.version}",
         title=schema.name,
         description=schema.description,
         required=schema.required_sections if schema.required_sections else None,
         properties=properties,
         additional_properties=False if not schema.additional_properties else None,
+        all_of=deferred if deferred else None,
     )

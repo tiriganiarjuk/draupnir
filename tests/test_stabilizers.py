@@ -29,3 +29,19 @@ class TestStabilizeName:
     def test_first_matching_suffix_wins(self) -> None:
         """Edge case: name ending with multiple suffix-like patterns."""
         assert stabilize_name("foo_reduced_resolved") == "foo_reduced"
+
+    def test_hybrid_sf_resolved_guardrails_reduced(self) -> None:
+        result = stabilize_name("success_failure_resolved_guardrails_reduced")
+        assert result == "criteria"
+
+    def test_hybrid_sf_reduced_guardrails_resolved(self) -> None:
+        result = stabilize_name("success_failure_reduced_guardrails_resolved")
+        assert result == "criteria"
+
+    def test_hybrid_examples_reduced_instructions_resolved(self) -> None:
+        result = stabilize_name("examples_reduced_instructions_resolved")
+        assert result == "execution"
+
+    def test_hybrid_examples_resolved_instructions_reduced(self) -> None:
+        result = stabilize_name("examples_resolved_instructions_reduced")
+        assert result == "execution"

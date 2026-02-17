@@ -18,7 +18,7 @@ class TestGenerateSchema:
         doc = generate_schema(schema_path, FIXTURES)
         assert doc.title == "test-schema"
         assert doc.schema_uri == "https://json-schema.org/draft/2020-12/schema"
-        assert doc.schema_id == "agent-test-schema"
+        assert doc.schema_id == "test-schema-schema-v1"
 
     def test_output_structure(self) -> None:
         """Generated document has expected JSON Schema structure."""
@@ -48,7 +48,7 @@ class TestGenerateSchema:
         security = doc.properties["security"]
         entries = security.properties["entries"]
         assert entries.type == "array"
-        assert "agent_name" in entries.items.properties
+        assert "metadata_agent_name" in entries.items.properties
 
 
 class TestSerializeSchema:
@@ -59,7 +59,7 @@ class TestSerializeSchema:
         json_text = serialize_schema(doc)
         parsed = json.loads(json_text)
         assert parsed["$schema"] == "https://json-schema.org/draft/2020-12/schema"
-        assert parsed["$id"] == "agent-test-schema"
+        assert parsed["$id"] == "test-schema-schema-v1"
         assert parsed["title"] == "test-schema"
         assert parsed["type"] == "object"
 

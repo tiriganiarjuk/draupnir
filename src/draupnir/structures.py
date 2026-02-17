@@ -52,7 +52,7 @@ class ConditionalRequirement(BaseModel):
     YAML shape: {only_when: {field: str, equals?: str, in?: [str], present?: bool}}
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
 
     field: str
     equals: str | None = None
@@ -80,6 +80,18 @@ class NotConstraint(BaseModel):
     model_config = ConfigDict(frozen=True, populate_by_name=True)
 
     ref: str = Field(alias="$ref")  # e.g., "PATH_BLOCKLIST"
+
+
+class PrimitiveArrayItems(BaseModel):
+    """Items type for array-type primitives.
+
+    YAML shape: {type: string}
+    Only used by primitives with type=array (e.g., role_expertise).
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    type: str
 
 
 class RefString(BaseModel):
@@ -153,6 +165,11 @@ class RawPrimitive(BaseModel):
     not_constraint: NotConstraint | None = Field(default=None, alias="not")
     validation: ValidationConstraint | None = None
     semantic: SemanticConstraint | None = None
+    # Array-type primitives only (type == "array"):
+    items: PrimitiveArrayItems | None = None
+    min_items: int | None = Field(default=None, alias="minItems")
+    max_items: int | None = Field(default=None, alias="maxItems")
+    unique_items: bool | None = Field(default=None, alias="uniqueItems")
 
 
 class RawComposed(BaseModel):
@@ -334,6 +351,36 @@ class WalkedSchema(BaseModel):
     sections: tuple[WalkedSection, ...] = ()
 
 
+class ForbiddenEntry(BaseModel):
+    """A single expanded blocklist entry for inline x-not.
+
+    Each entry carries everything needed to validate a path against it:
+    name + (const | enum | pattern) + description.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    const: str | None = None
+    enum: tuple[str, ...] | None = None
+    pattern: str | None = None
+    description: str | None = None
+
+
+class BlocklistPool(BaseModel):
+    """Pre-expanded blocklist entries indexed by composed name.
+
+    Built once at pipeline start from blocklist composed files.
+    Passed through resolvers so x-not references expand inline.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    entries: dict[str, tuple[ForbiddenEntry, ...]] = Field(
+        default_factory=dict,
+    )
+
+
 # =============================================================================
 # RESOLVED TYPES (after type adoption — Phase 3 resolver produces these)
 # =============================================================================
@@ -350,17 +397,23 @@ class ResolvedField(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     name: str  # STABLE JSON field name
-    json_type: str  # terminal type: "string", "integer", "boolean"
+    json_type: str  # terminal type: "string", "integer", "boolean", "array"
     format: str | None = None
     pattern: str | None = None
     enum_values: tuple[str, ...] | None = None
     description: str | None = None
     requirement: str | RequirementCondition | None = None
+    const: str | None = None  # fixed value (e.g., return_status)
     default: str | bool | int | None = None
     minimum: int | None = None
-    not_ref: str | None = None  # blocklist reference name
+    not_entries: tuple[ForbiddenEntry, ...] | None = None  # expanded blocklist
     validation: ValidationConstraint | None = None
     semantic: SemanticConstraint | None = None
+    # Array-type primitives (json_type == "array"):
+    items_type: str | None = None  # e.g., "string"
+    min_items: int | None = None
+    max_items: int | None = None
+    unique_items: bool | None = None
 
 
 class ResolvedGroup(BaseModel):
@@ -478,12 +531,62 @@ class SchemaConditional(BaseModel):
     else_: SchemaCondition | None = Field(default=None, alias="else")
 
 
-class SchemaNotRef(BaseModel):
-    """x-not extension referencing a blocklist: {"$ref": "NAME"}."""
+class SchemaNestedPath(BaseModel):
+    """Nested property path for cross-section conditionals.
+
+    Self-referential: each level wraps the next in a properties dict.
+    Terminal nodes carry either a constraint (enum/const), required
+    list, or Literal[False] for prohibition.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    properties: (
+        dict[
+            str,
+            "SchemaNestedPath | SchemaEnumConstraint | SchemaConst | Literal[False]",
+        ]
+        | None
+    ) = None
+    required: tuple[str, ...] | None = None
+
+
+SchemaNestedPath.model_rebuild()
+
+
+class SchemaRootConditional(BaseModel):
+    """Root-level if/then/else for cross-section conditionals.
+
+    Uses SchemaNestedPath bodies (not SchemaCondition) because the
+    condition and target span different sections, requiring nested
+    property paths to reach the relevant fields.
+    """
 
     model_config = ConfigDict(frozen=True, populate_by_name=True)
 
-    ref: str = Field(alias="$ref")
+    if_: SchemaNestedPath = Field(alias="if")
+    then_: SchemaNestedPath = Field(alias="then")
+    else_: SchemaNestedPath | None = Field(default=None, alias="else")
+
+
+class SchemaForbiddenEntry(BaseModel):
+    """A single forbidden entry in the x-not block."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    const: str | None = None
+    enum: tuple[str, ...] | None = None
+    pattern: str | None = None
+    description: str | None = None
+
+
+class SchemaNotBlock(BaseModel):
+    """x-not extension with inline forbidden entries."""
+
+    model_config = ConfigDict(frozen=True)
+
+    forbidden: tuple[SchemaForbiddenEntry, ...]
 
 
 class SchemaSemanticExt(BaseModel):
@@ -511,6 +614,7 @@ class SchemaField(BaseModel):
 
     type: str
     description: str | None = None
+    const: str | None = None
     format: str | None = None
     pattern: str | None = None
     enum: tuple[str, ...] | None = None
@@ -519,7 +623,7 @@ class SchemaField(BaseModel):
     x_validation: ValidationConstraint | None = Field(
         default=None, alias="x-validation",
     )
-    x_not: SchemaNotRef | None = Field(default=None, alias="x-not")
+    x_not: SchemaNotBlock | None = Field(default=None, alias="x-not")
     x_semantic: SchemaSemanticExt | None = Field(
         default=None, alias="x-semantic",
     )
@@ -583,7 +687,8 @@ class SchemaDocument(BaseModel):
     """Complete JSON Schema document (root output).
 
     Serializes to the top-level JSON Schema with $schema, $id, title,
-    description, type, required, properties, additionalProperties.
+    description, type, required, properties, additionalProperties,
+    and optional allOf for cross-section conditionals.
     """
 
     model_config = ConfigDict(frozen=True, populate_by_name=True)
@@ -597,4 +702,7 @@ class SchemaDocument(BaseModel):
     properties: dict[str, SchemaObject] = Field(default_factory=dict)
     additional_properties: bool | None = Field(
         default=None, alias="additionalProperties",
+    )
+    all_of: tuple[SchemaRootConditional, ...] | None = Field(
+        default=None, alias="allOf",
     )

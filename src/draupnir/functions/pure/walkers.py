@@ -35,6 +35,26 @@ from draupnir.structures import (
 # =============================================================================
 
 
+def is_file_reference(value: str) -> bool:
+    """Check if a field value is a file path (vs bare primitive name).
+
+    File references contain a directory separator. Bare primitive names
+    are simple identifiers like 'agent_name'.
+    """
+    return "/" in value
+
+
+def synthesize_bare_primitive(field_name: str, type_name: str) -> RawComposed:
+    """Create a synthetic RawComposed for a bare primitive field reference.
+
+    Groups can reference primitives directly (bare name, no file path).
+    The walker wraps these as thin RawComposed so the resolver can
+    process them uniformly. Requirement is left None — the resolver
+    inherits it from the primitive's own requirement field.
+    """
+    return RawComposed(name=field_name, type=type_name)
+
+
 def is_structural_composed(composed: RawComposed) -> bool:
     """Check if a composed field is structural (type=object with fields)."""
     return composed.type == "object" and composed.fields is not None
@@ -57,7 +77,8 @@ def walk_composed_to_group(
 
     Structural composed fields (type=object with fields dict) are
     nested objects. Their fields reference primitive types by name,
-    not file paths — so no further walking is needed.
+    not file paths — so no file loading is needed. Each field is
+    synthesized as a thin RawComposed for the resolver.
     """
     raw_group = RawGroup(
         name=composed.name,
@@ -67,7 +88,11 @@ def walk_composed_to_group(
         additional_properties=composed.additional_properties or False,
         fields=composed.fields or {},
     )
-    return WalkedGroup(raw=raw_group)
+    thin_fields = tuple(
+        synthesize_bare_primitive(name, type_name)
+        for name, type_name in (composed.fields or {}).items()
+    )
+    return WalkedGroup(raw=raw_group, composed_fields=thin_fields)
 
 
 # =============================================================================
@@ -90,6 +115,9 @@ def walk_group(
     sub_groups: list[WalkedGroup] = []
     composed_arrays: list[RawComposed] = []
     for field_name, field_path in raw_group.fields.items():
+        if not is_file_reference(field_path):
+            thin_fields.append(synthesize_bare_primitive(field_name, field_path))
+            continue
         composed = loaders.composed(root / field_path)
         if is_structural_composed(composed):
             sub_groups.append(walk_composed_to_group(composed))

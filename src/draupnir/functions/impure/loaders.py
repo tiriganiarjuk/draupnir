@@ -96,6 +96,73 @@ def load_all_primitives(directory: Path) -> list[RawPrimitive]:
     return [load_primitive(p) for p in sorted(directory.glob("*.yaml"))]
 
 
+STAGE_SUFFIXES = ("_resolved", "_reduced", "_merged")
+
+
+def is_stage_variant(path: Path) -> bool:
+    """Check if a file is a pipeline stage variant (not the base file).
+
+    Variants are loaded by the walker via file path references.
+    The type pool only needs base entries to avoid name collisions.
+    """
+    stem = path.stem
+    return any(stem.endswith(s) for s in STAGE_SUFFIXES)
+
+
+def load_composed_type_adopters(directory: Path) -> list[RawPrimitive]:
+    """Load base thin composed type-adopters as RawPrimitive for the type pool.
+
+    Thin composed files (type adoption only, no structural composition)
+    participate in type chains alongside primitives. Stage variants are
+    excluded — they share stabilized names with their base files and are
+    loaded by the walker via file path when needed.
+    """
+    if not directory.exists():
+        return []
+    result: list[RawPrimitive] = []
+    for path in sorted(directory.glob("*.yaml")):
+        if is_stage_variant(path):
+            continue
+        composed = load_composed(path)
+        if not is_thin_adopter(composed):
+            continue
+        result.append(RawPrimitive.model_validate(
+            yaml.safe_load(path.read_text()),
+        ))
+    return result
+
+
+def load_blocklist_composed(directory: Path) -> list[RawComposed]:
+    """Load blocklist composed files (imports-only, no type).
+
+    Blocklist files are identified by having imports but no type.
+    They're loaded as RawComposed for the resolver to expand.
+    """
+    if not directory.exists():
+        return []
+    result: list[RawComposed] = []
+    for path in sorted(directory.glob("*.yaml")):
+        composed = load_composed(path)
+        if composed.imports is not None and composed.type is None:
+            result.append(composed)
+    return result
+
+
+def is_thin_adopter(composed: RawComposed) -> bool:
+    """Check if a RawComposed is a thin type-adopter for the type pool."""
+    if composed.type is None:
+        return False
+    if composed.fields is not None:
+        return False
+    if composed.composition is not None:
+        return False
+    if composed.imports is not None:
+        return False
+    if composed.items is not None:
+        return False
+    return True
+
+
 def make_schema_loaders(root: Path) -> SchemaLoaders:
     """Build SchemaLoaders that resolve paths relative to root.
 

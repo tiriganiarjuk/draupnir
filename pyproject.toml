@@ -11,6 +11,19 @@ dependencies = [
 [project.scripts]
 draupnir = "draupnir.cli:main"
 
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.uv.sources]
+gleipnir = { path = "/Users/johnny/.ai/gleipnir", editable = true }
+
+[project.optional-dependencies]
+dev = [
+    "gleipnir",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

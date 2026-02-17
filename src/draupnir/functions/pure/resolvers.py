@@ -15,6 +15,7 @@ from draupnir.structures import (
     ComposedArrayItems,
     RawComposed,
     RawPrimitive,
+    RawSchema,
     ResolvedArray,
     ResolvedField,
     ResolvedGroup,
@@ -320,3 +321,23 @@ def resolve_walked_schema(
         optional_sections=schema.raw.optional_sections,
         sections=sections,
     )
+
+
+# =============================================================================
+# SCHEMA SECTIONS BRIDGE (pre-Phase 5 compatibility)
+# =============================================================================
+
+
+def build_schema_sections_dict(
+    schema: RawSchema,
+) -> dict[str, str]:
+    """Build sections dict from required + optional section names.
+
+    Current schema YAMLs list sections by name only (no file paths).
+    This bridges to the walker's format: {name: "sections/{name}.yaml"}.
+    If schema.sections is already populated (post Phase 5), returns it.
+    """
+    if schema.sections:
+        return dict(schema.sections)
+    all_names = list(schema.required_sections) + list(schema.optional_sections)
+    return {name: f"sections/{name}.yaml" for name in all_names}

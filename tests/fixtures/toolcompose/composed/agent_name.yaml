@@ -1,0 +1,4 @@
+name: agent_name
+type: agent_name
+requirement: mandatory
+description: The agent's unique name.

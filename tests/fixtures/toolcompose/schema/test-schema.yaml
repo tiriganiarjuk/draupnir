@@ -1,0 +1,8 @@
+name: test-schema
+version: 1
+description: Test schema for e2e validation.
+additional_properties: false
+sections:
+  security: sections/security.yaml
+required_sections: [security]
+optional_sections: []

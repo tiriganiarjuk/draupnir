@@ -1,0 +1,8 @@
+name: path_allowed_any
+type: string
+requirement: required
+format: uri-reference
+description: Allowed filesystem path.
+validation:
+  instruction: must_be_within_allowed_paths
+  severity: error

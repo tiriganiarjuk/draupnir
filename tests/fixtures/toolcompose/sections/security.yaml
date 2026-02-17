@@ -1,0 +1,8 @@
+name: security
+type: object
+additional_properties: false
+sub_components:
+  paths: groups/paths.yaml
+arrays:
+  entries: arrays/entries.yaml
+required_fields: [paths]

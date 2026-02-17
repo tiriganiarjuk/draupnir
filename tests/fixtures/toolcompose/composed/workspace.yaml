@@ -1,0 +1,4 @@
+name: workspace
+type: path_allowed_any
+requirement: required
+description: Workspace directory path.

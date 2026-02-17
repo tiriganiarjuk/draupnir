@@ -22,6 +22,7 @@ from draupnir.structures import (
 )
 from draupnir.functions.pure.resolvers import (
     build_primitives_pool,
+    build_schema_sections_dict,
     collect_type_chain,
     resolve_composed_array,
     resolve_composed_array_items,
@@ -638,3 +639,48 @@ class TestNameStabilization:
         )
         field = resolve_thin_composed(composed, pool)
         assert field.name == "context_path"
+
+
+# =============================================================================
+# SCHEMA SECTIONS BRIDGE
+# =============================================================================
+
+
+class TestBuildSchemaSectionsDict:
+    def test_from_names(self) -> None:
+        """Schema with required+optional but no sections dict → dict built."""
+        schema = RawSchema(
+            name="test", version=1, description="Test.",
+            required_sections=("security", "execution"),
+            optional_sections=("criteria",),
+        )
+        result = build_schema_sections_dict(schema)
+        assert result == {
+            "security": "sections/security.yaml",
+            "execution": "sections/execution.yaml",
+            "criteria": "sections/criteria.yaml",
+        }
+
+    def test_passthrough(self) -> None:
+        """Schema with sections dict already → returned as-is."""
+        schema = RawSchema(
+            name="test", version=1, description="Test.",
+            sections={
+                "security": "sections/security_resolved.yaml",
+                "execution": "sections/execution_resolved.yaml",
+            },
+            required_sections=("security",),
+        )
+        result = build_schema_sections_dict(schema)
+        assert result == {
+            "security": "sections/security_resolved.yaml",
+            "execution": "sections/execution_resolved.yaml",
+        }
+
+    def test_empty(self) -> None:
+        """Schema with no sections → empty dict."""
+        schema = RawSchema(
+            name="test", version=1, description="Test.",
+        )
+        result = build_schema_sections_dict(schema)
+        assert result == {}

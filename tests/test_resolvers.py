@@ -3,6 +3,7 @@
 import pytest
 
 from draupnir.structures import (
+    ComposedArrayItems,
     NotConstraint,
     RawArray,
     RawComposed,
@@ -22,6 +23,8 @@ from draupnir.structures import (
 from draupnir.functions.pure.resolvers import (
     build_primitives_pool,
     collect_type_chain,
+    resolve_composed_array,
+    resolve_composed_array_items,
     resolve_thin_composed,
     resolve_structural_fields,
     resolve_type_chain,
@@ -355,6 +358,51 @@ class TestResolveWalkedSection:
         assert resolved.required_fields == ("paths",)
 
 
+class TestResolveWalkedSectionWithArrays:
+    def test_section_arrays_resolved(self) -> None:
+        """WalkedSection with arrays → ResolvedSection with resolved arrays."""
+        pool = _simple_pool()
+        item_raw = RawGroup(name="criterion", type="object")
+        item_walked = WalkedGroup(raw=item_raw)
+        raw_array = RawArray.model_validate(
+            {"name": "success_criteria", "type": "array", "items": {"$ref": "x"}},
+        )
+        walked_array = WalkedArray(raw=raw_array, items=(item_walked,))
+        raw_section = RawSection(
+            name="criteria",
+            type="object",
+            required_fields=("success_criteria",),
+        )
+        walked = WalkedSection(
+            raw=raw_section,
+            arrays=(walked_array,),
+        )
+        resolved = resolve_walked_section(walked, pool)
+        assert len(resolved.arrays) == 1
+        assert resolved.arrays[0].name == "success_criteria"
+
+    def test_section_with_both(self) -> None:
+        """Section with components AND arrays → both resolved."""
+        pool = _simple_pool()
+        comp_raw = RawGroup(name="paths", type="object")
+        comp_walked = WalkedGroup(raw=comp_raw)
+        item_raw = RawGroup(name="item", type="object")
+        item_walked = WalkedGroup(raw=item_raw)
+        raw_array = RawArray.model_validate(
+            {"name": "entries", "type": "array", "items": {"$ref": "x"}},
+        )
+        walked_array = WalkedArray(raw=raw_array, items=(item_walked,))
+        raw_section = RawSection(name="mixed", type="object")
+        walked = WalkedSection(
+            raw=raw_section,
+            components=(comp_walked,),
+            arrays=(walked_array,),
+        )
+        resolved = resolve_walked_section(walked, pool)
+        assert len(resolved.components) == 1
+        assert len(resolved.arrays) == 1
+
+
 class TestResolveWalkedSchema:
     def test_full_resolution(self) -> None:
         pool = _simple_pool()
@@ -379,3 +427,214 @@ class TestResolveWalkedSchema:
         assert resolved.version == 3
         assert len(resolved.sections) == 1
         assert resolved.sections[0].name == "security"
+
+
+# =============================================================================
+# COMPOSED ARRAY RESOLUTION
+# =============================================================================
+
+
+class TestResolveComposedArrayItems:
+    def test_ref_items(self) -> None:
+        """$ref to primitive → ResolvedField with chain-resolved properties."""
+        pool = _make_pool()
+        items = ComposedArrayItems(ref="dispatch_mode")
+        result = resolve_composed_array_items(items, pool)
+        assert result.json_type == "string"
+        assert result.enum_values == ("batch", "full")
+
+    def test_inline_type(self) -> None:
+        """type=integer → ResolvedField(json_type='integer')."""
+        pool = _simple_pool()
+        items = ComposedArrayItems(type="integer")
+        result = resolve_composed_array_items(items, pool)
+        assert result.json_type == "integer"
+
+    def test_neither_raises(self) -> None:
+        """Neither ref nor type → ValueError."""
+        pool = _simple_pool()
+        items = ComposedArrayItems()
+        with pytest.raises(ValueError, match="neither"):
+            resolve_composed_array_items(items, pool)
+
+
+class TestResolveComposedArray:
+    def test_basic_ref_items(self) -> None:
+        """Composed array with $ref items resolves correctly."""
+        pool = _make_pool()
+        composed = RawComposed(
+            name="guardrails_constraints",
+            type="array",
+            requirement="mandatory",
+            description="Behavioral constraints.",
+            items=ComposedArrayItems(ref="instruction_text"),
+            min_items=1,
+            unique_items=True,
+            semantic=SemanticConstraint(
+                intent="Boundary.", severity="error",
+            ),
+        )
+        result = resolve_composed_array(composed, pool)
+        assert result.name == "guardrails_constraints"
+        assert result.description == "Behavioral constraints."
+        assert result.min_items == 1
+        assert result.unique_items is True
+        assert result.requirement == "mandatory"
+        assert result.semantic is not None
+        assert result.semantic.intent == "Boundary."
+        # Items resolved to a field
+        from draupnir.structures import ResolvedField
+        assert isinstance(result.items, ResolvedField)
+        assert result.items.json_type == "string"
+
+    def test_inline_type_items(self) -> None:
+        """Composed array with inline type items."""
+        pool = _simple_pool()
+        composed = RawComposed(
+            name="batch_sizes",
+            type="array",
+            requirement="optional",
+            items=ComposedArrayItems(type="integer"),
+            max_items=10,
+        )
+        result = resolve_composed_array(composed, pool)
+        assert result.name == "batch_sizes"
+        from draupnir.structures import ResolvedField
+        assert isinstance(result.items, ResolvedField)
+        assert result.items.json_type == "integer"
+        assert result.max_items == 10
+
+    def test_conditional_requirement(self) -> None:
+        """Composed array with conditional requirement preserved."""
+        pool = _make_pool()
+        cond = RequirementCondition(
+            only_when=ConditionalRequirement(
+                field="dispatch_mode", equals="batch",
+            ),
+        )
+        composed = RawComposed(
+            name="batch_sizes",
+            type="array",
+            requirement=cond,
+            items=ComposedArrayItems(type="integer"),
+        )
+        result = resolve_composed_array(composed, pool)
+        assert isinstance(result.requirement, RequirementCondition)
+
+    def test_no_items_raises(self) -> None:
+        """Composed array without items → ValueError."""
+        pool = _simple_pool()
+        composed = RawComposed(
+            name="bad_array",
+            type="array",
+            requirement="optional",
+        )
+        with pytest.raises(ValueError, match="no items"):
+            resolve_composed_array(composed, pool)
+
+    def test_name_stabilized(self) -> None:
+        """Composed array name gets stabilized."""
+        pool = _simple_pool()
+        composed = RawComposed(
+            name="constraints_resolved",
+            type="array",
+            requirement="optional",
+            items=ComposedArrayItems(type="string"),
+        )
+        result = resolve_composed_array(composed, pool)
+        assert result.name == "constraints"
+
+
+class TestResolveGroupWithComposedArrays:
+    def test_composed_arrays_in_group(self) -> None:
+        """WalkedGroup with composed_arrays → ResolvedGroup with arrays."""
+        pool = _make_pool()
+        composed_arr = RawComposed(
+            name="constraints",
+            type="array",
+            requirement="mandatory",
+            items=ComposedArrayItems(ref="instruction_text"),
+        )
+        raw_group = RawGroup(name="guardrails", type="object")
+        walked = WalkedGroup(
+            raw=raw_group,
+            composed_arrays=(composed_arr,),
+        )
+        resolved = resolve_walked_group(walked, pool)
+        assert len(resolved.arrays) == 1
+        assert resolved.arrays[0].name == "constraints"
+        assert resolved.arrays[0].requirement == "mandatory"
+
+    def test_file_and_composed_arrays_combined(self) -> None:
+        """Group with both file-ref and composed arrays."""
+        pool = _simple_pool()
+        # File-ref array
+        item_raw = RawGroup(name="item", type="object")
+        item_walked = WalkedGroup(raw=item_raw)
+        raw_array = RawArray.model_validate(
+            {"name": "entries", "type": "array", "items": {"$ref": "x"}},
+        )
+        walked_array = WalkedArray(raw=raw_array, items=(item_walked,))
+        # Composed array
+        composed_arr = RawComposed(
+            name="sizes",
+            type="array",
+            requirement="optional",
+            items=ComposedArrayItems(type="integer"),
+        )
+        raw_group = RawGroup(name="parent", type="object")
+        walked = WalkedGroup(
+            raw=raw_group,
+            arrays=(walked_array,),
+            composed_arrays=(composed_arr,),
+        )
+        resolved = resolve_walked_group(walked, pool)
+        assert len(resolved.arrays) == 2
+        names = {a.name for a in resolved.arrays}
+        assert names == {"entries", "sizes"}
+
+
+# =============================================================================
+# NAME STABILIZATION
+# =============================================================================
+
+
+class TestNameStabilization:
+    def test_group_name_stabilized(self) -> None:
+        pool = _simple_pool()
+        raw_group = RawGroup(
+            name="security_resolved", type="object",
+        )
+        walked = WalkedGroup(raw=raw_group)
+        resolved = resolve_walked_group(walked, pool)
+        assert resolved.name == "security"
+
+    def test_array_name_stabilized(self) -> None:
+        pool = _simple_pool()
+        item_raw = RawGroup(name="item", type="object")
+        item_walked = WalkedGroup(raw=item_raw)
+        raw_array = RawArray.model_validate(
+            {"name": "entries_reduced", "type": "array", "items": {"$ref": "x"}},
+        )
+        walked = WalkedArray(raw=raw_array, items=(item_walked,))
+        resolved = resolve_walked_array(walked, pool)
+        assert resolved.name == "entries"
+
+    def test_section_name_stabilized(self) -> None:
+        pool = _simple_pool()
+        raw_section = RawSection(
+            name="criteria_resolved", type="object",
+        )
+        walked = WalkedSection(raw=raw_section)
+        resolved = resolve_walked_section(walked, pool)
+        assert resolved.name == "criteria"
+
+    def test_composed_name_stabilized(self) -> None:
+        pool = _simple_pool()
+        composed = RawComposed(
+            name="context_path_resolved",
+            type="agent_name",
+            requirement="required",
+        )
+        field = resolve_thin_composed(composed, pool)
+        assert field.name == "context_path"

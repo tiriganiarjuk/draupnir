@@ -10,7 +10,9 @@ all properties accumulated. Shallower primitives override deeper ones.
 
 from collections.abc import Sequence
 
+from draupnir.functions.pure.stabilizers import stabilize_name
 from draupnir.structures import (
+    ComposedArrayItems,
     RawComposed,
     RawPrimitive,
     ResolvedArray,
@@ -130,7 +132,7 @@ def resolve_thin_composed(
     """
     chain_result = resolve_type_chain(composed.type, pool)
     return ResolvedField(
-        name=composed.name,
+        name=stabilize_name(composed.name),
         json_type=chain_result.json_type,
         format=chain_result.format,
         pattern=chain_result.pattern,
@@ -173,6 +175,53 @@ def resolve_structural_fields(
 
 
 # =============================================================================
+# COMPOSED ARRAY RESOLUTION
+# =============================================================================
+
+
+def resolve_composed_array_items(
+    items: ComposedArrayItems,
+    pool: dict[str, RawPrimitive],
+) -> ResolvedField:
+    """Resolve composed array items to a ResolvedField.
+
+    Items reference a primitive by name ($ref) or declare an inline
+    JSON type (type). Returns a ResolvedField for the item type.
+    """
+    if items.ref is not None:
+        return resolve_type_chain(items.ref, pool)
+    if items.type is not None:
+        return ResolvedField(name="_items", json_type=items.type)
+    msg = "Composed array items has neither $ref nor type"
+    raise ValueError(msg)
+
+
+def resolve_composed_array(
+    composed: RawComposed,
+    pool: dict[str, RawPrimitive],
+) -> ResolvedArray:
+    """Resolve a composed array field to a ResolvedArray.
+
+    The items are resolved via the primitives pool (name-based),
+    not via file-based group references.
+    """
+    if composed.items is None:
+        msg = f"Composed array {composed.name!r} has no items"
+        raise ValueError(msg)
+    item_field = resolve_composed_array_items(composed.items, pool)
+    return ResolvedArray(
+        name=stabilize_name(composed.name),
+        description=composed.description,
+        items=item_field,
+        requirement=composed.requirement,
+        min_items=composed.min_items,
+        max_items=composed.max_items,
+        unique_items=composed.unique_items,
+        semantic=composed.semantic,
+    )
+
+
+# =============================================================================
 # WALKED → RESOLVED CONVERSION
 # =============================================================================
 
@@ -194,18 +243,22 @@ def resolve_walked_group(
         resolve_walked_group(sg, pool)
         for sg in group.sub_groups
     )
-    arrays = tuple(
+    file_arrays = tuple(
         resolve_walked_array(a, pool)
         for a in group.arrays
     )
+    comp_arrays = tuple(
+        resolve_composed_array(c, pool)
+        for c in group.composed_arrays
+    )
     return ResolvedGroup(
-        name=group.raw.name,
+        name=stabilize_name(group.raw.name),
         description=group.raw.description,
         composition=group.raw.composition,
         additional_properties=group.raw.additional_properties,
         fields=fields,
         sub_groups=sub_groups,
-        arrays=arrays,
+        arrays=file_arrays + comp_arrays,
         required_fields=group.raw.required_fields,
     )
 
@@ -219,7 +272,7 @@ def resolve_walked_array(
         resolve_walked_group(g, pool) for g in array.items
     )
     return ResolvedArray(
-        name=array.raw.name,
+        name=stabilize_name(array.raw.name),
         description=array.raw.description,
         items=items,
     )
@@ -234,13 +287,18 @@ def resolve_walked_section(
         resolve_walked_group(g, pool)
         for g in section.components
     )
+    arrays = tuple(
+        resolve_walked_array(a, pool)
+        for a in section.arrays
+    )
     return ResolvedSection(
-        name=section.raw.name,
+        name=stabilize_name(section.raw.name),
         description=section.raw.description,
         composition=section.raw.composition,
         additional_properties=section.raw.additional_properties,
         required_fields=section.raw.required_fields,
         components=components,
+        arrays=arrays,
     )
 
 

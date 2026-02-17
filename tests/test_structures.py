@@ -8,6 +8,8 @@ from pydantic import ValidationError
 
 from draupnir.structures import (
     ArrayItems,
+    ComposedArrayItems,
+    ConditionalRequirement,
     NotConstraint,
     RawArray,
     RawComposed,
@@ -16,11 +18,14 @@ from draupnir.structures import (
     RawSchema,
     RawSection,
     RefString,
+    RequirementCondition,
     ResolvedArray,
     ResolvedField,
     ResolvedGroup,
     ResolvedSchema,
     ResolvedSection,
+    SchemaArray,
+    SchemaField,
     SemanticConstraint,
     ValidationConstraint,
     WalkedArray,
@@ -117,6 +122,28 @@ class TestArrayItems:
 # =============================================================================
 # RAW TYPES — model_validate from YAML-shaped dicts
 # =============================================================================
+
+
+class TestComposedArrayItems:
+    def test_ref_shape(self) -> None:
+        """YAML shape: {$ref: guardrails_constraint}"""
+        data = {"$ref": "guardrails_constraint"}
+        cai = ComposedArrayItems.model_validate(data)
+        assert cai.ref == "guardrails_constraint"
+        assert cai.type is None
+
+    def test_type_shape(self) -> None:
+        """YAML shape: {type: integer}"""
+        data = {"type": "integer"}
+        cai = ComposedArrayItems.model_validate(data)
+        assert cai.ref is None
+        assert cai.type == "integer"
+
+    def test_empty_valid(self) -> None:
+        """Neither ref nor type — valid at parse time, resolver will catch."""
+        cai = ComposedArrayItems.model_validate({})
+        assert cai.ref is None
+        assert cai.type is None
 
 
 class TestRawPrimitive:
@@ -278,6 +305,53 @@ class TestRawComposed:
         assert c.fields == {"include": "path_exists_absolute"}
 
 
+class TestRawComposedArrayShape:
+    def test_guardrails_constraints_shape(self) -> None:
+        """guardrails_constraints.yaml — composed array with $ref items."""
+        data = {
+            "name": "guardrails_constraints",
+            "type": "array",
+            "requirement": "mandatory",
+            "description": "Behavioral constraints.",
+            "items": {"$ref": "guardrails_constraint"},
+            "minItems": 1,
+            "uniqueItems": True,
+            "semantic": {
+                "intent": "Boundary enforcement.",
+                "severity": "error",
+            },
+        }
+        c = RawComposed.model_validate(data)
+        assert c.type == "array"
+        assert c.items is not None
+        assert c.items.ref == "guardrails_constraint"
+        assert c.min_items == 1
+        assert c.max_items is None
+        assert c.unique_items is True
+        assert c.semantic is not None
+
+    def test_dispatch_batch_size_shape(self) -> None:
+        """dispatch_batch_size.yaml — composed array with inline type + conditional."""
+        data = {
+            "name": "dispatch_batch_size",
+            "type": "array",
+            "requirement": {
+                "only_when": {"field": "dispatch_mode", "equals": "batch"},
+            },
+            "description": "Batch sizes.",
+            "items": {"type": "integer"},
+            "minItems": 1,
+            "maxItems": 10,
+        }
+        c = RawComposed.model_validate(data)
+        assert c.type == "array"
+        assert c.items is not None
+        assert c.items.type == "integer"
+        assert c.min_items == 1
+        assert c.max_items == 10
+        assert isinstance(c.requirement, RequirementCondition)
+
+
 class TestRawGroup:
     def test_regular_group_yaml(self) -> None:
         """security_paths.yaml shape."""
@@ -391,9 +465,26 @@ class TestRawSection:
         assert len(s.sub_components) == 2
         assert s.required_fields == ("security_capabilities", "security_paths")
 
+    def test_with_arrays(self) -> None:
+        """Section with arrays dict."""
+        data = {
+            "name": "criteria",
+            "type": "object",
+            "sub_components": {"paths": "groups/paths.yaml"},
+            "arrays": {
+                "success_criteria": "arrays/success_criteria.yaml",
+                "failure_criteria": "arrays/failure_criteria.yaml",
+            },
+            "required_fields": ["success_criteria"],
+        }
+        s = RawSection.model_validate(data)
+        assert len(s.arrays) == 2
+        assert s.arrays["success_criteria"] == "arrays/success_criteria.yaml"
+
     def test_defaults(self) -> None:
         s = RawSection.model_validate({"name": "minimal", "type": "object"})
         assert s.sub_components == {}
+        assert s.arrays == {}
         assert s.required_fields == ()
         assert s.additional_properties is False
 
@@ -522,6 +613,62 @@ class TestResolvedArray:
         item2 = ResolvedGroup(name="include", fields=())
         a = ResolvedArray(name="example_entries", items=(item1, item2))
         assert len(a.items) == 2
+
+
+class TestResolvedArrayWidened:
+    def test_with_field_items(self) -> None:
+        """Composed arrays resolve to ResolvedField items."""
+        item = ResolvedField(name="_items", json_type="integer")
+        a = ResolvedArray(
+            name="batch_sizes",
+            items=item,
+            min_items=1,
+            max_items=10,
+            unique_items=True,
+        )
+        assert isinstance(a.items, ResolvedField)
+        assert a.items.json_type == "integer"
+        assert a.min_items == 1
+        assert a.max_items == 10
+        assert a.unique_items is True
+
+    def test_with_requirement(self) -> None:
+        """Composed arrays carry their own requirement."""
+        item = ResolvedField(name="_items", json_type="string")
+        a = ResolvedArray(
+            name="constraints",
+            items=item,
+            requirement="mandatory",
+        )
+        assert a.requirement == "mandatory"
+
+    def test_with_semantic(self) -> None:
+        """Composed arrays can carry semantic constraints."""
+        sc = SemanticConstraint(intent="Boundary.", severity="error")
+        item = ResolvedField(name="_items", json_type="string")
+        a = ResolvedArray(name="constraints", items=item, semantic=sc)
+        assert a.semantic is not None
+        assert a.semantic.intent == "Boundary."
+
+
+class TestSchemaArrayWidened:
+    def test_with_field_items(self) -> None:
+        """SchemaArray items can be SchemaField for composed arrays."""
+        field = SchemaField(type="integer")
+        a = SchemaArray(items=field, min_items=1, unique_items=True)
+        assert isinstance(a.items, SchemaField)
+        assert a.min_items == 1
+        assert a.unique_items is True
+
+    def test_serialization(self) -> None:
+        """model_dump produces minItems, maxItems, uniqueItems aliases."""
+        field = SchemaField(type="string")
+        a = SchemaArray(items=field, min_items=2, max_items=5, unique_items=True)
+        dumped = a.model_dump(by_alias=True, exclude_none=True)
+        assert dumped["minItems"] == 2
+        assert dumped["maxItems"] == 5
+        assert dumped["uniqueItems"] is True
+        assert "min_items" not in dumped
 
 
 class TestResolvedSection:

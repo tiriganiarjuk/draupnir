@@ -12,7 +12,9 @@ from draupnir.structures import (
     RawSection,
     SchemaLoaders,
 )
+from draupnir.structures import RefString
 from draupnir.functions.pure.walkers import (
+    is_blocklist_composed,
     walk_array,
     walk_group,
     walk_schema,
@@ -130,6 +132,117 @@ class TestWalkGroup:
         assert walked.sub_groups == ()
         assert walked.arrays == ()
 
+    def test_blocklist_composed_skipped(self) -> None:
+        """Blocklist composed (no type, has imports) is skipped entirely."""
+        raw_group = RawGroup(
+            name="parent",
+            type="object",
+            fields={"blocklist": "composed/blocklist.yaml"},
+        )
+        file_map = {
+            "/fake/toolcompose/composed/blocklist.yaml": {
+                "name": "PATH_BLOCKLIST",
+                "description": "Forbidden path patterns.",
+                "imports": [
+                    {"$ref": "path_forbidden_root"},
+                    {"$ref": "path_forbidden_home"},
+                ],
+            },
+        }
+        walked = walk_group(raw_group, ROOT, make_loaders(file_map))
+        assert walked.composed_fields == ()
+        assert walked.sub_groups == ()
+        assert walked.composed_arrays == ()
+
+
+    def test_composed_array_classified(self) -> None:
+        """Composed array (type=array) goes to composed_arrays, not fields."""
+        raw_group = RawGroup(
+            name="parent",
+            type="object",
+            fields={"constraints": "composed/constraints.yaml"},
+        )
+        file_map = {
+            "/fake/toolcompose/composed/constraints.yaml": {
+                "name": "constraints",
+                "type": "array",
+                "requirement": "mandatory",
+                "description": "Behavioral constraints.",
+                "items": {"$ref": "guardrails_constraint"},
+                "minItems": 1,
+            },
+        }
+        walked = walk_group(raw_group, ROOT, make_loaders(file_map))
+        assert len(walked.composed_fields) == 0
+        assert len(walked.sub_groups) == 0
+        assert len(walked.composed_arrays) == 1
+        assert walked.composed_arrays[0].name == "constraints"
+        assert walked.composed_arrays[0].type == "array"
+
+    def test_mixed_composed_types(self) -> None:
+        """Group with thin, structural, array, and blocklist composed fields."""
+        raw_group = RawGroup(
+            name="parent",
+            type="object",
+            fields={
+                "thin": "composed/thin.yaml",
+                "structural": "composed/structural.yaml",
+                "arr": "composed/arr.yaml",
+                "blocklist": "composed/blocklist.yaml",
+            },
+        )
+        file_map = {
+            "/fake/toolcompose/composed/thin.yaml": {
+                "name": "thin",
+                "type": "string",
+                "requirement": "required",
+            },
+            "/fake/toolcompose/composed/structural.yaml": {
+                "name": "structural",
+                "type": "object",
+                "requirement": "required",
+                "composition": "AllOf",
+                "additional_properties": False,
+                "fields": {"include": "path_exists_absolute"},
+            },
+            "/fake/toolcompose/composed/arr.yaml": {
+                "name": "arr",
+                "type": "array",
+                "requirement": "optional",
+                "items": {"type": "integer"},
+            },
+            "/fake/toolcompose/composed/blocklist.yaml": {
+                "name": "PATH_BLOCKLIST",
+                "description": "Forbidden.",
+                "imports": [{"$ref": "path_forbidden"}],
+            },
+        }
+        walked = walk_group(raw_group, ROOT, make_loaders(file_map))
+        assert len(walked.composed_fields) == 1  # thin
+        assert len(walked.sub_groups) == 1  # structural
+        assert len(walked.composed_arrays) == 1  # arr
+        # blocklist is skipped entirely
+
+
+class TestIsBlocklistComposed:
+    def test_blocklist_detected(self) -> None:
+        """Composed with no type and imports is blocklist."""
+        composed = RawComposed(
+            name="PATH_BLOCKLIST",
+            description="Forbidden patterns.",
+            imports=(
+                RefString(ref="path_forbidden_root"),
+                RefString(ref="path_forbidden_home"),
+            ),
+        )
+        assert is_blocklist_composed(composed) is True
+
+    def test_thin_not_blocklist(self) -> None:
+        composed = RawComposed(
+            name="field_a", type="string", requirement="required",
+        )
+        assert is_blocklist_composed(composed) is False
+
 
 # =============================================================================
 # ARRAY WALKING
@@ -210,12 +323,75 @@ class TestWalkSection:
         assert len(walked.components) == 1
         assert walked.components[0].raw.name == "security_paths"
 
+    def test_section_with_arrays(self) -> None:
+        """Section with arrays dict → WalkedSection.arrays populated."""
+        raw_section = RawSection(
+            name="criteria",
+            type="object",
+            arrays={
+                "success_criteria": "arrays/success_criteria.yaml",
+            },
+        )
+        file_map = {
+            "/fake/toolcompose/arrays/success_criteria.yaml": {
+                "name": "success_criteria",
+                "type": "array",
+                "items": {"$ref": "groups/criterion.yaml"},
+            },
+            "/fake/toolcompose/groups/criterion.yaml": {
+                "name": "criterion",
+                "type": "object",
+                "fields": {},
+            },
+        }
+        walked = walk_section(
+            raw_section, ROOT, make_loaders(file_map),
+        )
+        assert len(walked.arrays) == 1
+        assert walked.arrays[0].raw.name == "success_criteria"
+
+    def test_section_with_components_and_arrays(self) -> None:
+        """Section with both sub_components and arrays."""
+        raw_section = RawSection(
+            name="execution",
+            type="object",
+            sub_components={
+                "dispatch": "groups/dispatch.yaml",
+            },
+            arrays={
+                "instructions": "arrays/instructions.yaml",
+            },
+        )
+        file_map = {
+            "/fake/toolcompose/groups/dispatch.yaml": {
+                "name": "dispatch",
+                "type": "object",
+                "fields": {},
+            },
+            "/fake/toolcompose/arrays/instructions.yaml": {
+                "name": "instructions",
+                "type": "array",
+                "items": {"$ref": "groups/instruction_item.yaml"},
+            },
+            "/fake/toolcompose/groups/instruction_item.yaml": {
+                "name": "instruction_item",
+                "type": "object",
+                "fields": {},
+            },
+        }
+        walked = walk_section(
+            raw_section, ROOT, make_loaders(file_map),
+        )
+        assert len(walked.components) == 1
+        assert len(walked.arrays) == 1
+
     def test_empty_section(self) -> None:
         raw_section = RawSection(name="empty", type="object")
         walked = walk_section(
             raw_section, ROOT, make_loaders({}),
         )
         assert walked.components == ()
+        assert walked.arrays == ()
 
 
 # =============================================================================

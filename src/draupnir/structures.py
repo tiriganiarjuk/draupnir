@@ -106,6 +106,22 @@ class ArrayItems(BaseModel):
     one_of: tuple[RefString, ...] | None = Field(default=None, alias="oneOf")
 
 
+class ComposedArrayItems(BaseModel):
+    """Items for a composed array field.
+
+    Two shapes:
+    - $ref to primitive name: {$ref: guardrails_constraint}
+    - Inline JSON type: {type: integer}
+
+    Distinct from ArrayItems which references groups by file path.
+    """
+
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
+
+    ref: str | None = Field(default=None, alias="$ref")
+    type: str | None = None
+
+
 # =============================================================================
 # RAW TYPES (from YAML loading — Phase 2 validators produce these)
 # =============================================================================
@@ -142,19 +158,20 @@ class RawPrimitive(BaseModel):
 class RawComposed(BaseModel):
     """Composed field as loaded from YAML.
 
-    Three shapes:
+    Four shapes:
     - Thin: adopts a primitive type (type = primitive name).
     - Structural: an object with its own fields (type = "object").
+    - Array: array with primitive items (type = "array").
     - Blocklist: pattern composition (imports list of $refs, no type field).
 
     Requirement can be string or conditional dict.
     The name field is the STABLE JSON field name — never changes per stage.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
 
     name: str
-    type: str | None = None  # primitive name, "object", or absent (blocklist)
+    type: str | None = None  # primitive name, "object", "array", or absent
     requirement: str | RequirementCondition | None = None
     description: str | None = None
     # Structural composed only (type == "object"):
@@ -163,6 +180,12 @@ class RawComposed(BaseModel):
     fields: dict[str, str] | None = None  # field_name → primitive type name
     # Blocklist pattern (no type field):
     imports: tuple[RefString, ...] | None = None
+    # Composed array (type == "array"):
+    items: ComposedArrayItems | None = None
+    min_items: int | None = Field(default=None, alias="minItems")
+    max_items: int | None = Field(default=None, alias="maxItems")
+    unique_items: bool | None = Field(default=None, alias="uniqueItems")
+    semantic: SemanticConstraint | None = None
 
 
 class RawGroup(BaseModel):
@@ -218,6 +241,7 @@ class RawSection(BaseModel):
     additional_properties: bool = False
     required_fields: tuple[str, ...] = ()
     sub_components: dict[str, str] = Field(default_factory=dict)  # name → file path
+    arrays: dict[str, str] = Field(default_factory=dict)  # name → file path
 
 
 class RawSchema(BaseModel):
@@ -277,6 +301,7 @@ class WalkedGroup(BaseModel):
 
     raw: RawGroup
     composed_fields: tuple[RawComposed, ...] = ()
+    composed_arrays: tuple[RawComposed, ...] = ()  # type="array" composed fields
     sub_groups: tuple["WalkedGroup", ...] = ()  # structural composed → nested groups
     arrays: tuple["WalkedArray", ...] = ()
 
@@ -291,12 +316,13 @@ class WalkedArray(BaseModel):
 
 
 class WalkedSection(BaseModel):
-    """Section with all sub-components loaded as walked groups."""
+    """Section with all sub-components and arrays loaded."""
 
     model_config = ConfigDict(frozen=True)
 
     raw: RawSection
     components: tuple[WalkedGroup, ...] = ()
+    arrays: tuple[WalkedArray, ...] = ()
 
 
 class WalkedSchema(BaseModel):
@@ -358,17 +384,26 @@ class ResolvedGroup(BaseModel):
 
 
 class ResolvedArray(BaseModel):
-    """Array with resolved item types."""
+    """Array with resolved item types.
+
+    Items is a union: group-referencing arrays have tuple[ResolvedGroup, ...],
+    composed arrays have a single ResolvedField (resolved primitive items).
+    """
 
     model_config = ConfigDict(frozen=True)
 
     name: str  # STABLE JSON field name
     description: str | None = None
-    items: tuple[ResolvedGroup, ...]  # one = single type, multiple = oneOf
+    items: tuple[ResolvedGroup, ...] | ResolvedField
+    requirement: str | RequirementCondition | None = None  # composed arrays
+    min_items: int | None = None
+    max_items: int | None = None
+    unique_items: bool | None = None
+    semantic: SemanticConstraint | None = None
 
 
 class ResolvedSection(BaseModel):
-    """Section with all sub-components fully resolved."""
+    """Section with all sub-components and arrays fully resolved."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -378,6 +413,7 @@ class ResolvedSection(BaseModel):
     additional_properties: bool = False
     required_fields: tuple[str, ...] = ()
     components: tuple[ResolvedGroup, ...] = ()
+    arrays: tuple[ResolvedArray, ...] = ()
 
 
 class ResolvedSchema(BaseModel):
@@ -526,14 +562,21 @@ class SchemaOneOf(BaseModel):
 class SchemaArray(BaseModel):
     """JSON Schema array property.
 
-    Items is either a single SchemaObject or a SchemaOneOf wrapper.
+    Items can be SchemaObject (group), SchemaOneOf (union of groups),
+    or SchemaField (composed array with primitive items).
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
 
     type: str = "array"
     description: str | None = None
-    items: SchemaObject | SchemaOneOf
+    items: SchemaObject | SchemaOneOf | SchemaField
+    min_items: int | None = Field(default=None, alias="minItems")
+    max_items: int | None = Field(default=None, alias="maxItems")
+    unique_items: bool | None = Field(default=None, alias="uniqueItems")
+    x_semantic: SchemaSemanticExt | None = Field(
+        default=None, alias="x-semantic",
+    )
 
 
 class SchemaDocument(BaseModel):

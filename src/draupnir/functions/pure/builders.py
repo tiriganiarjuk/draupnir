@@ -89,6 +89,16 @@ def is_field_required(field: ResolvedField) -> bool:
     return False
 
 
+def is_cross_group_conditional(cond: ConditionalRequirement) -> bool:
+    """Check if a conditional references a field in another group.
+
+    Cross-group conditionals use dot-path field references like
+    'task.return.return_mode'. These cannot be emitted as local
+    conditionals — they must be deferred to the schema root.
+    """
+    return "." in cond.field
+
+
 def classify_field_requirement(
     field: ResolvedField,
 ) -> tuple[str | None, SchemaConditional | None]:
@@ -96,12 +106,15 @@ def classify_field_requirement(
 
     Returns (required_name, conditional):
     - If unconditionally required: (field.name, None)
-    - If conditional: (None, SchemaConditional)
+    - If conditional (local): (None, SchemaConditional)
+    - If conditional (cross-group): (None, None) — deferred
     - If optional/other: (None, None)
     """
     if is_field_required(field):
         return (field.name, None)
     if isinstance(field.requirement, RequirementCondition):
+        if is_cross_group_conditional(field.requirement.only_when):
+            return (None, None)  # deferred to schema root (Phase 4)
         cond = build_only_when_conditional(
             field.requirement.only_when, field.name,
         )
@@ -134,6 +147,32 @@ def build_condition_if_clause(
         constraint = SchemaConst(const=cond.equals)
         return SchemaCondition(properties={cond.field: constraint})
     return SchemaCondition(required=(cond.field,))
+
+
+def classify_array_requirement(
+    arr: ResolvedArray,
+    required_fields: tuple[str, ...],
+) -> tuple[str | None, SchemaConditional | None]:
+    """Classify an array's requirement as required name or conditional.
+
+    Two sources of requiredness:
+    - File-ref arrays: name appears in parent group's required_fields
+    - Composed arrays: carry their own .requirement field
+    """
+    if arr.name in required_fields:
+        return (arr.name, None)
+    if arr.requirement is None:
+        return (None, None)
+    if isinstance(arr.requirement, str):
+        if arr.requirement in ("mandatory", "required"):
+            return (arr.name, None)
+        return (None, None)
+    if isinstance(arr.requirement, RequirementCondition):
+        cond = build_only_when_conditional(
+            arr.requirement.only_when, arr.name,
+        )
+        return (None, cond)
+    return (None, None)
 
 
 # =============================================================================
@@ -178,8 +217,11 @@ def collect_group_contents(
             required.append(sub.name)
     for arr in group.arrays:
         properties[arr.name] = build_array(arr)
-        if arr.name in group.required_fields:
-            required.append(arr.name)
+        req_name, cond = classify_array_requirement(arr, group.required_fields)
+        if req_name is not None:
+            required.append(req_name)
+        if cond is not None:
+            conditionals.append(cond)
     return properties, required, conditionals
 
 
@@ -193,13 +235,19 @@ def build_array(array: ResolvedArray) -> SchemaArray:
     return SchemaArray(
         description=array.description,
         items=build_array_items(array.items),
+        min_items=array.min_items,
+        max_items=array.max_items,
+        unique_items=array.unique_items,
+        x_semantic=build_semantic_ext(array.semantic),
     )
 
 
 def build_array_items(
-    items: tuple[ResolvedGroup, ...],
-) -> SchemaObject | SchemaOneOf:
-    """Build array items: single group or oneOf wrapper."""
+    items: tuple[ResolvedGroup, ...] | ResolvedField,
+) -> SchemaObject | SchemaOneOf | SchemaField:
+    """Build array items: field, single group, or oneOf wrapper."""
+    if isinstance(items, ResolvedField):
+        return build_field(items)
     if len(items) == 1:
         return build_group(items[0])
     return SchemaOneOf(one_of=tuple(build_group(g) for g in items))
@@ -218,6 +266,10 @@ def build_section(section: ResolvedSection) -> SchemaObject:
         properties[comp.name] = build_group(comp)
         if comp.name in section.required_fields:
             required.append(comp.name)
+    for arr in section.arrays:
+        properties[arr.name] = build_array(arr)
+        if arr.name in section.required_fields:
+            required.append(arr.name)
     return SchemaObject(
         description=section.description,
         properties=properties,

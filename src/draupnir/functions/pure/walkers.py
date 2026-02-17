@@ -40,6 +40,16 @@ def is_structural_composed(composed: RawComposed) -> bool:
     return composed.type == "object" and composed.fields is not None
 
 
+def is_composed_array(composed: RawComposed) -> bool:
+    """Check if a composed field is an array (type=array with items)."""
+    return composed.type == "array"
+
+
+def is_blocklist_composed(composed: RawComposed) -> bool:
+    """Check if a composed field is a blocklist (no type, has imports)."""
+    return composed.type is None and composed.imports is not None
+
+
 def walk_composed_to_group(
     composed: RawComposed,
 ) -> WalkedGroup:
@@ -78,10 +88,15 @@ def walk_group(
     """
     thin_fields: list[RawComposed] = []
     sub_groups: list[WalkedGroup] = []
+    composed_arrays: list[RawComposed] = []
     for field_name, field_path in raw_group.fields.items():
         composed = loaders.composed(root / field_path)
         if is_structural_composed(composed):
             sub_groups.append(walk_composed_to_group(composed))
+        elif is_composed_array(composed):
+            composed_arrays.append(composed)
+        elif is_blocklist_composed(composed):
+            pass  # not a property — contributes via x-not references
         else:
             thin_fields.append(composed)
 
@@ -89,6 +104,7 @@ def walk_group(
     return WalkedGroup(
         raw=raw_group,
         composed_fields=tuple(thin_fields),
+        composed_arrays=tuple(composed_arrays),
         sub_groups=tuple(sub_groups),
         arrays=tuple(arrays),
     )
@@ -158,15 +174,30 @@ def walk_section(
     root: PurePosixPath,
     loaders: SchemaLoaders,
 ) -> WalkedSection:
-    """Walk a section, loading its sub-component groups."""
+    """Walk a section, loading its sub-component groups and arrays."""
     components: list[WalkedGroup] = []
     for comp_name, comp_path in raw_section.sub_components.items():
         raw_group = loaders.group(root / comp_path)
         components.append(walk_group(raw_group, root, loaders))
+    arrays = walk_section_arrays(raw_section, root, loaders)
     return WalkedSection(
         raw=raw_section,
         components=tuple(components),
+        arrays=tuple(arrays),
     )
+
+
+def walk_section_arrays(
+    raw_section: RawSection,
+    root: PurePosixPath,
+    loaders: SchemaLoaders,
+) -> tuple[WalkedArray, ...]:
+    """Load and walk arrays referenced by a section."""
+    walked: list[WalkedArray] = []
+    for array_name, array_path in raw_section.arrays.items():
+        raw_array = loaders.array(root / array_path)
+        walked.append(walk_array(raw_array, root, loaders))
+    return tuple(walked)
 
 
 # =============================================================================

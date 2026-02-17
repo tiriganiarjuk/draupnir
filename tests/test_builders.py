@@ -24,7 +24,9 @@ from draupnir.functions.pure.builders import (
     build_schema_document,
     build_section,
     build_semantic_ext,
+    classify_array_requirement,
     classify_field_requirement,
+    is_cross_group_conditional,
     is_field_required,
 )
 
@@ -206,6 +208,53 @@ class TestClassifyFieldRequirement:
         assert cond is None
 
 
+class TestIsCrossGroupConditional:
+    def test_dot_path_is_cross_group(self) -> None:
+        """field: task.return.return_mode → cross-group."""
+        cond = ConditionalRequirement(
+            field="task.return.return_mode",
+            in_values=("metrics-output", "output"),
+        )
+        assert is_cross_group_conditional(cond) is True
+
+    def test_simple_field_is_local(self) -> None:
+        """field: dispatch_mode → local."""
+        cond = ConditionalRequirement(field="dispatch_mode", equals="batch")
+        assert is_cross_group_conditional(cond) is False
+
+
+class TestCrossGroupConditionalSkipped:
+    def test_cross_group_not_emitted(self) -> None:
+        """Cross-group conditional → not in required, no local conditional."""
+        req = RequirementCondition(
+            only_when=ConditionalRequirement(
+                field="task.return.return_mode",
+                in_values=("metrics-output", "output"),
+            ),
+        )
+        f = ResolvedField(
+            name="output_kind", json_type="string", requirement=req,
+        )
+        name, cond = classify_field_requirement(f)
+        assert name is None
+        assert cond is None  # skipped, not emitted
+
+    def test_local_conditional_still_works(self) -> None:
+        """Non-dot-path conditional → still emits normally."""
+        req = RequirementCondition(
+            only_when=ConditionalRequirement(
+                field="dispatch_mode", equals="batch",
+            ),
+        )
+        f = ResolvedField(
+            name="batch_size", json_type="integer", requirement=req,
+        )
+        name, cond = classify_field_requirement(f)
+        assert name is None
+        assert cond is not None
+        assert cond.then_.required == ("batch_size",)
+
+
 class TestBuildConditionIfClause:
     def test_equals(self) -> None:
         cond = ConditionalRequirement(field="mode", equals="batch")
@@ -361,6 +410,149 @@ class TestBuildArray:
         assert result.description == "List of entries."
 
 
+class TestBuildArrayWithConstraints:
+    def test_constraints_passed_through(self) -> None:
+        """min_items/max_items/unique_items appear in output."""
+        item = ResolvedField(name="_items", json_type="string")
+        arr = ResolvedArray(
+            name="constraints",
+            items=item,
+            min_items=1,
+            max_items=10,
+            unique_items=True,
+        )
+        result = build_array(arr)
+        assert result.min_items == 1
+        assert result.max_items == 10
+        assert result.unique_items is True
+
+    def test_constraints_serialization(self) -> None:
+        """model_dump produces minItems, maxItems, uniqueItems."""
+        item = ResolvedField(name="_items", json_type="string")
+        arr = ResolvedArray(
+            name="constraints",
+            items=item,
+            min_items=2,
+            max_items=5,
+            unique_items=True,
+        )
+        result = build_array(arr)
+        dumped = result.model_dump(by_alias=True, exclude_none=True)
+        assert dumped["minItems"] == 2
+        assert dumped["maxItems"] == 5
+        assert dumped["uniqueItems"] is True
+
+    def test_semantic_passed_through(self) -> None:
+        """x-semantic appears in array output."""
+        sc = SemanticConstraint(
+            intent="Boundary enforcement.",
+            severity="error",
+            checks=("check1",),
+        )
+        item = ResolvedField(name="_items", json_type="string")
+        arr = ResolvedArray(
+            name="constraints", items=item, semantic=sc,
+        )
+        result = build_array(arr)
+        assert result.x_semantic is not None
+        assert result.x_semantic.intent == "Boundary enforcement."
+
+
+class TestBuildArrayItemsField:
+    def test_resolved_field_items(self) -> None:
+        """ResolvedField items → SchemaField."""
+        item = ResolvedField(name="_items", json_type="integer")
+        result = build_array_items(item)
+        assert result.type == "integer"
+
+
+class TestClassifyArrayRequirement:
+    def test_in_required_fields(self) -> None:
+        """Array name in parent's required_fields → required."""
+        item = ResolvedField(name="_items", json_type="string")
+        arr = ResolvedArray(name="entries", items=item)
+        name, cond = classify_array_requirement(arr, ("entries",))
+        assert name == "entries"
+        assert cond is None
+
+    def test_own_requirement_mandatory(self) -> None:
+        """Composed array with requirement='mandatory' → required."""
+        item = ResolvedField(name="_items", json_type="string")
+        arr = ResolvedArray(
+            name="constraints", items=item, requirement="mandatory",
+        )
+        name, cond = classify_array_requirement(arr, ())
+        assert name == "constraints"
+        assert cond is None
+
+    def test_own_requirement_optional(self) -> None:
+        """Composed array with requirement='optional' → neither."""
+        item = ResolvedField(name="_items", json_type="string")
+        arr = ResolvedArray(
+            name="constraints", items=item, requirement="optional",
+        )
+        name, cond = classify_array_requirement(arr, ())
+        assert name is None
+        assert cond is None
+
+    def test_own_requirement_conditional(self) -> None:
+        """Composed array with conditional requirement → allOf."""
+        cond_req = RequirementCondition(
+            only_when=ConditionalRequirement(
+                field="mode", equals="batch",
+            ),
+        )
+        item = ResolvedField(name="_items", json_type="integer")
+        arr = ResolvedArray(
+            name="batch_sizes", items=item, requirement=cond_req,
+        )
+        name, cond = classify_array_requirement(arr, ())
+        assert name is None
+        assert cond is not None
+        assert cond.then_.required == ("batch_sizes",)
+
+    def test_no_requirement(self) -> None:
+        """Array with no requirement and not in required_fields → neither."""
+        item = ResolvedField(name="_items", json_type="string")
+        arr = ResolvedArray(name="entries", items=item)
+        name, cond = classify_array_requirement(arr, ())
+        assert name is None
+        assert cond is None
+
+
+class TestBuildGroupWithComposedArrays:
+    def test_required_composed_array(self) -> None:
+        """Composed array with requirement='mandatory' → in required."""
+        item = ResolvedField(name="_items", json_type="string")
+        arr = ResolvedArray(
+            name="constraints", items=item, requirement="mandatory",
+        )
+        group = ResolvedGroup(name="guardrails", arrays=(arr,))
+        result = build_group(group)
+        assert "constraints" in result.properties
+        assert result.properties["constraints"].type == "array"
+        assert result.required == ("constraints",)
+
+    def test_conditional_composed_array(self) -> None:
+        """Composed array with conditional requirement → allOf."""
+        cond_req = RequirementCondition(
+            only_when=ConditionalRequirement(
+                field="mode", equals="batch",
+            ),
+        )
+        item = ResolvedField(name="_items", json_type="integer")
+        arr = ResolvedArray(
+            name="batch_sizes", items=item, requirement=cond_req,
+        )
+        group = ResolvedGroup(name="execution", arrays=(arr,))
+        result = build_group(group)
+        assert "batch_sizes" in result.properties
+        assert result.required is None
+        assert result.all_of is not None
+        assert len(result.all_of) == 1
+        assert result.all_of[0].then_.required == ("batch_sizes",)
+
+
 class TestBuildArrayItems:
     def test_single_item(self) -> None:
         item = ResolvedGroup(name="entry")
@@ -406,6 +598,36 @@ class TestBuildSection:
         result = build_section(section)
         assert "paths" in result.properties
         assert result.required == ("paths",)
+
+    def test_with_arrays(self) -> None:
+        """Section with arrays → arrays in output properties."""
+        item = ResolvedGroup(name="criterion")
+        arr = ResolvedArray(name="success_criteria", items=(item,))
+        section = ResolvedSection(
+            name="criteria",
+            arrays=(arr,),
+            required_fields=("success_criteria",),
+        )
+        result = build_section(section)
+        assert "success_criteria" in result.properties
+        assert result.properties["success_criteria"].type == "array"
+        assert result.required == ("success_criteria",)
+
+    def test_with_components_and_arrays(self) -> None:
+        """Section with both components and arrays."""
+        comp = ResolvedGroup(name="paths")
+        item = ResolvedGroup(name="item")
+        arr = ResolvedArray(name="entries", items=(item,))
+        section = ResolvedSection(
+            name="execution",
+            components=(comp,),
+            arrays=(arr,),
+            required_fields=("paths", "entries"),
+        )
+        result = build_section(section)
+        assert "paths" in result.properties
+        assert "entries" in result.properties
+        assert set(result.required) == {"paths", "entries"}
 
     def test_oneof_section(self) -> None:
         section = ResolvedSection(name="s", composition="OneOf")

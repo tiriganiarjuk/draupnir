@@ -8,8 +8,6 @@ Model.model_validate(yaml_dict) works directly. Pydantic aliases handle
 YAML keys that aren't valid Python identifiers (e.g., $ref, not).
 """
 
-from __future__ import annotations
-
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -254,8 +252,8 @@ class WalkedGroup(BaseModel):
 
     raw: RawGroup
     composed_fields: tuple[RawComposed, ...] = ()
-    sub_groups: tuple[WalkedGroup, ...] = ()  # structural composed → nested groups
-    arrays: tuple[WalkedArray, ...] = ()
+    sub_groups: tuple["WalkedGroup", ...] = ()  # structural composed → nested groups
+    arrays: tuple["WalkedArray", ...] = ()
 
 
 class WalkedArray(BaseModel):
@@ -329,8 +327,8 @@ class ResolvedGroup(BaseModel):
     composition: str | None = None
     additional_properties: bool = False
     fields: tuple[ResolvedField, ...] = ()
-    sub_groups: tuple[ResolvedGroup, ...] = ()
-    arrays: tuple[ResolvedArray, ...] = ()
+    sub_groups: tuple["ResolvedGroup", ...] = ()
+    arrays: tuple["ResolvedArray", ...] = ()
     required_fields: tuple[str, ...] = ()
 
 

@@ -3,6 +3,7 @@
 import sys
 
 
-def main() -> None:
-    print("draupnir: not yet implemented", file=sys.stderr)
-    sys.exit(1)
+def main() -> int:
+    """Entry point — stub until Phase 4."""
+    sys.stderr.write("draupnir: not yet implemented\n")
+    return 1

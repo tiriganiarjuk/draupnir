@@ -1,0 +1,14 @@
+# EXCEPTIONS - draupnir tool only
+# Max 4 unsafe_files, max 4 boundary_files
+# Paths MUST contain "/" (no bare basenames)
+#
+# Add TRUE boundary files only as they emerge:
+#   - Entry boundary: YAML file readers/loaders
+#   - Exit boundary: JSON Schema writers
+#
+# Empty quarantine = clean start.
+# Let violations reveal architectural debt.
+
+[quarantine]
+unsafe_files = []
+boundary_files = []

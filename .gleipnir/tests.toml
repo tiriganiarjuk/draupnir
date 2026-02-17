@@ -1,0 +1,8 @@
+# TESTS CONTROL PANEL - pytest settings
+#
+# Configuration for pytest guardrails runner
+
+[pytest]
+verbose = true
+strict = true
+fail_fast = false

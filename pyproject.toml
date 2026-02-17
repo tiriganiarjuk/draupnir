@@ -1,0 +1,16 @@
+[project]
+name = "draupnir"
+version = "0.1.0"
+description = "Schema generator — walks composition trees from root schema definitions to produce JSON Schema"
+requires-python = ">=3.13"
+dependencies = [
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+draupnir = "draupnir.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

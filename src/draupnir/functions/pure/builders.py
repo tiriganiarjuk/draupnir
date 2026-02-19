@@ -9,6 +9,7 @@ model_dump(by_alias=True, exclude_none=True) at the writer boundary.
 
 from draupnir.structures import (
     ConditionalRequirement,
+    ConstraintEntry,
     ForbiddenEntry,
     ResolvedArray,
     ResolvedField,
@@ -20,6 +21,8 @@ from draupnir.structures import (
     SchemaCondition,
     SchemaConditional,
     SchemaConst,
+    SchemaConstraintBlock,
+    SchemaConstraintEntry,
     SchemaDocument,
     SchemaEnumConstraint,
     SchemaField,
@@ -62,6 +65,7 @@ def build_field(
         x_validation=field.validation,
         x_not=build_not_block(field.not_entries),
         x_semantic=build_semantic_ext(field.semantic),
+        x_constraint=build_constraint_block(field.constraint),
     )
 
 
@@ -111,6 +115,25 @@ def build_semantic_ext(
         severity=sc.severity,
         checks=sc.checks if sc.checks else None,
         anti_patterns=sc.anti_patterns if sc.anti_patterns else None,
+    )
+
+
+def build_constraint_block(
+    entries: tuple[ConstraintEntry, ...] | None,
+) -> SchemaConstraintBlock | None:
+    """Convert ConstraintEntry tuple to a SchemaConstraintBlock."""
+    if entries is None:
+        return None
+    return SchemaConstraintBlock(
+        constraints=tuple(
+            SchemaConstraintEntry(
+                rule=e.rule,
+                field=e.field,
+                severity=e.severity,
+                reason=e.reason,
+            )
+            for e in entries
+        ),
     )
 
 

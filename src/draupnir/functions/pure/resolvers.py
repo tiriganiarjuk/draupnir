@@ -276,6 +276,7 @@ def resolve_thin_composed(
         not_entries=chain_result.not_entries,
         validation=chain_result.validation,
         semantic=chain_result.semantic,
+        constraint=composed.x_constraint,
         items_type=chain_result.items_type,
         min_items=chain_result.min_items,
         max_items=chain_result.max_items,

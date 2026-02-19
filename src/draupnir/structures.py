@@ -46,6 +46,21 @@ class SemanticConstraint(BaseModel):
     severity: str
 
 
+class ConstraintEntry(BaseModel):
+    """Cross-field resolver constraint attached to a composed field.
+
+    YAML shape: {rule: str, field: str, severity: str, reason: str}
+    Emitted as x-constraint in generated schema. Enforced by resolver.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    rule: str  # e.g., "not_equal", "not_subpath_of"
+    field: str  # other field name to check against
+    severity: str
+    reason: str
+
+
 class ConditionalRequirement(BaseModel):
     """Conditional requirement — field required only when another field matches.
 
@@ -203,6 +218,9 @@ class RawComposed(BaseModel):
     max_items: int | None = Field(default=None, alias="maxItems")
     unique_items: bool | None = Field(default=None, alias="uniqueItems")
     semantic: SemanticConstraint | None = None
+    x_constraint: tuple[ConstraintEntry, ...] | None = Field(
+        default=None, alias="x-constraint",
+    )
 
 
 class RawGroup(BaseModel):
@@ -409,6 +427,7 @@ class ResolvedField(BaseModel):
     not_entries: tuple[ForbiddenEntry, ...] | None = None  # expanded blocklist
     validation: ValidationConstraint | None = None
     semantic: SemanticConstraint | None = None
+    constraint: tuple[ConstraintEntry, ...] | None = None  # resolver hints
     # Array-type primitives (json_type == "array"):
     items_type: str | None = None  # e.g., "string"
     min_items: int | None = None
@@ -603,11 +622,30 @@ class SchemaSemanticExt(BaseModel):
     anti_patterns: tuple[str, ...] | None = None
 
 
+class SchemaConstraintEntry(BaseModel):
+    """A single entry in the x-constraint block."""
+
+    model_config = ConfigDict(frozen=True)
+
+    rule: str
+    field: str
+    severity: str
+    reason: str
+
+
+class SchemaConstraintBlock(BaseModel):
+    """x-constraint extension with resolver constraint entries."""
+
+    model_config = ConfigDict(frozen=True)
+
+    constraints: tuple[SchemaConstraintEntry, ...]
+
+
 class SchemaField(BaseModel):
     """JSON Schema property for a leaf field.
 
     Serializes to: {type, description?, format?, pattern?, enum?,
-    default?, minimum?, x-validation?, x-not?, x-semantic?}
+    default?, minimum?, x-validation?, x-not?, x-semantic?, x-constraint?}
     """
 
     model_config = ConfigDict(frozen=True, populate_by_name=True)
@@ -626,6 +664,9 @@ class SchemaField(BaseModel):
     x_not: SchemaNotBlock | None = Field(default=None, alias="x-not")
     x_semantic: SchemaSemanticExt | None = Field(
         default=None, alias="x-semantic",
+    )
+    x_constraint: SchemaConstraintBlock | None = Field(
+        default=None, alias="x-constraint",
     )
 
 

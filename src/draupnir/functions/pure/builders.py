@@ -29,6 +29,8 @@ from draupnir.structures import (
     SchemaForbiddenEntry,
     SchemaNestedPath,
     SchemaNotBlock,
+    SchemaNullType,
+    SchemaNullableObject,
     SchemaObject,
     SchemaOneOf,
     SchemaRootConditional,
@@ -352,7 +354,10 @@ def build_section(section: ResolvedSection) -> SchemaObject:
 def collect_deferred_conditionals(
     schema: ResolvedSchema,
 ) -> tuple[SchemaRootConditional, ...]:
-    """Find cross-section conditionals and build root-level allOf."""
+    """Find cross-group conditionals and build root-level allOf.
+
+    Scans both section-nested groups and root-level groups.
+    """
     result: list[SchemaRootConditional] = []
     for section in schema.sections:
         for group in section.components:
@@ -361,6 +366,10 @@ def collect_deferred_conditionals(
                     group, (section.name, group.name),
                 ),
             )
+    for group in schema.groups:
+        result.extend(
+            scan_group_for_deferred(group, (group.name,)),
+        )
     return tuple(result)
 
 
@@ -455,17 +464,40 @@ def build_nested_forbidden(
 
 def build_schema_document(schema: ResolvedSchema) -> SchemaDocument:
     """Convert a ResolvedSchema to a SchemaDocument output model."""
-    properties: dict[str, SchemaObject] = {}
+    properties: dict[str, SchemaObject | SchemaNullableObject] = {}
     for section in schema.sections:
         properties[section.name] = build_section(section)
+    for group in schema.groups:
+        built = build_group(group)
+        if group.name in schema.nullable_groups:
+            properties[group.name] = wrap_nullable(built)
+        else:
+            properties[group.name] = built
+    required = build_required_list(schema)
     deferred = collect_deferred_conditionals(schema)
     return SchemaDocument(
         schema_uri="https://json-schema.org/draft/2020-12/schema",
         schema_id=f"{schema.name}-schema-v{schema.version}",
         title=schema.name,
         description=schema.description,
-        required=schema.required_sections if schema.required_sections else None,
+        required=required if required else None,
         properties=properties,
         additional_properties=False if not schema.additional_properties else None,
         all_of=deferred if deferred else None,
     )
+
+
+def wrap_nullable(obj: SchemaObject) -> SchemaNullableObject:
+    """Wrap a SchemaObject as nullable: oneOf [object, null]."""
+    return SchemaNullableObject(
+        one_of=(obj, SchemaNullType()),
+        description=obj.description,
+    )
+
+
+def build_required_list(
+    schema: ResolvedSchema,
+) -> tuple[str, ...]:
+    """Merge required sections and required groups into one list."""
+    required = list(schema.required_sections) + list(schema.required_groups)
+    return tuple(required)

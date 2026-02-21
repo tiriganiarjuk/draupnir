@@ -285,6 +285,9 @@ class RawSchema(BaseModel):
     After YAML migration (Phase 5), schemas reference sections
     by file path in the sections dict. The key is the stable JSON
     field name, the value is the section file path.
+
+    Flat schemas (e.g., render format) use groups dict instead of
+    sections — groups at root level, no intermediate section nesting.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -296,6 +299,9 @@ class RawSchema(BaseModel):
     sections: dict[str, str] = Field(default_factory=dict)  # name → file path
     required_sections: tuple[str, ...] = ()
     optional_sections: tuple[str, ...] = ()
+    groups: dict[str, str] = Field(default_factory=dict)  # name → group file path
+    required_groups: tuple[str, ...] = ()
+    nullable_groups: tuple[str, ...] = ()
 
 
 # =============================================================================
@@ -367,6 +373,8 @@ class WalkedSchema(BaseModel):
 
     raw: RawSchema
     sections: tuple[WalkedSection, ...] = ()
+    groups: tuple[WalkedGroup, ...] = ()
+    nullable_groups: tuple[str, ...] = ()
 
 
 class ForbiddenEntry(BaseModel):
@@ -500,6 +508,9 @@ class ResolvedSchema(BaseModel):
     required_sections: tuple[str, ...] = ()
     optional_sections: tuple[str, ...] = ()
     sections: tuple[ResolvedSection, ...] = ()
+    groups: tuple[ResolvedGroup, ...] = ()
+    required_groups: tuple[str, ...] = ()
+    nullable_groups: tuple[str, ...] = ()
 
 
 # =============================================================================
@@ -724,6 +735,27 @@ class SchemaArray(BaseModel):
     )
 
 
+class SchemaNullType(BaseModel):
+    """JSON Schema null type: {"type": "null"}."""
+
+    model_config = ConfigDict(frozen=True)
+
+    type: str = "null"
+
+
+class SchemaNullableObject(BaseModel):
+    """oneOf wrapper for nullable objects: [{type: object, ...}, {type: null}].
+
+    Used for root-level groups that can be null (e.g., optional render
+    sections like examples, constraints, anti_patterns).
+    """
+
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
+
+    one_of: tuple[SchemaObject, SchemaNullType] = Field(alias="oneOf")
+    description: str | None = None
+
+
 class SchemaDocument(BaseModel):
     """Complete JSON Schema document (root output).
 
@@ -740,7 +772,9 @@ class SchemaDocument(BaseModel):
     description: str
     type: str = "object"
     required: tuple[str, ...] | None = None
-    properties: dict[str, SchemaObject] = Field(default_factory=dict)
+    properties: dict[str, SchemaObject | SchemaNullableObject] = Field(
+        default_factory=dict,
+    )
     additional_properties: bool | None = Field(
         default=None, alias="additionalProperties",
     )

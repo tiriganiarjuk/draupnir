@@ -87,13 +87,14 @@ def load_schema(path: Path) -> RawSchema:
 
 
 def load_all_primitives(directory: Path) -> list[RawPrimitive]:
-    """Load all .yaml files in a directory as RawPrimitives.
+    """Load all .yaml files in a directory tree as RawPrimitives.
 
+    Recurses into subdirectories (e.g., primitives/render/).
     Returns an empty list if the directory does not exist.
     """
     if not directory.exists():
         return []
-    return [load_primitive(p) for p in sorted(directory.glob("*.yaml"))]
+    return [load_primitive(p) for p in sorted(directory.rglob("*.yaml"))]
 
 
 STAGE_SUFFIXES = ("_resolved", "_reduced", "_merged")
@@ -120,7 +121,7 @@ def load_composed_type_adopters(directory: Path) -> list[RawPrimitive]:
     if not directory.exists():
         return []
     result: list[RawPrimitive] = []
-    for path in sorted(directory.glob("*.yaml")):
+    for path in sorted(directory.rglob("*.yaml")):
         if is_stage_variant(path):
             continue
         composed = load_composed(path)
@@ -141,7 +142,7 @@ def load_blocklist_composed(directory: Path) -> list[RawComposed]:
     if not directory.exists():
         return []
     result: list[RawComposed] = []
-    for path in sorted(directory.glob("*.yaml")):
+    for path in sorted(directory.rglob("*.yaml")):
         composed = load_composed(path)
         if composed.imports is not None and composed.type is None:
             result.append(composed)

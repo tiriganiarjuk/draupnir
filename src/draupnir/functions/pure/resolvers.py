@@ -460,6 +460,10 @@ def resolve_walked_schema(
         resolve_walked_section(s, pool, blocklists)
         for s in schema.sections
     )
+    groups = tuple(
+        resolve_walked_group(g, pool, blocklists)
+        for g in schema.groups
+    )
     return ResolvedSchema(
         name=schema.raw.name,
         version=schema.raw.version,
@@ -468,6 +472,9 @@ def resolve_walked_schema(
         required_sections=schema.raw.required_sections,
         optional_sections=schema.raw.optional_sections,
         sections=sections,
+        groups=groups,
+        required_groups=schema.raw.required_groups,
+        nullable_groups=schema.nullable_groups,
     )
 
 

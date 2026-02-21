@@ -238,16 +238,22 @@ def walk_schema(
     root: PurePosixPath,
     loaders: SchemaLoaders,
 ) -> WalkedSchema:
-    """Walk a full schema, loading all referenced sections.
+    """Walk a full schema, loading all referenced sections and groups.
 
-    The schema's sections dict maps JSON field names to section file
-    paths relative to toolcompose root.
+    Sections dict maps JSON field names to section file paths.
+    Groups dict maps JSON field names to group file paths (flat schemas).
     """
     sections: list[WalkedSection] = []
     for section_name, section_path in raw_schema.sections.items():
         raw_section = loaders.section(root / section_path)
         sections.append(walk_section(raw_section, root, loaders))
+    groups: list[WalkedGroup] = []
+    for group_name, group_path in raw_schema.groups.items():
+        raw_group = loaders.group(root / group_path)
+        groups.append(walk_group(raw_group, root, loaders))
     return WalkedSchema(
         raw=raw_schema,
         sections=tuple(sections),
+        groups=tuple(groups),
+        nullable_groups=raw_schema.nullable_groups,
     )

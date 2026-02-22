@@ -51,14 +51,14 @@ def build_primitives_pool(
     error in the composition data.
     """
     pool: dict[str, RawPrimitive] = {}
-    for p in primitives:
-        if p.name in pool:
+    for primitive in primitives:
+        if primitive.name in pool:
             raise ValueError(
-                f"Type pool collision: '{p.name}' appears more than "
+                f"Type pool collision: '{primitive.name}' appears more than "
                 f"once. Primitives and composed type-adopters must "
                 f"have unique names."
             )
-        pool[p.name] = p
+        pool[primitive.name] = primitive
     return pool
 
 

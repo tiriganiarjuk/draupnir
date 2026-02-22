@@ -744,7 +744,7 @@ class SchemaNullType(BaseModel):
 
 
 class SchemaNullableObject(BaseModel):
-    """oneOf wrapper for nullable objects: [{type: object, ...}, {type: null}].
+    """oneOf wrapper for nullable groups: [{properties: ...}, {type: null}].
 
     Used for root-level groups that can be null (e.g., optional render
     sections like examples, constraints, anti_patterns).

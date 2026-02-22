@@ -92,31 +92,31 @@ def build_not_block(
     return SchemaNotBlock(
         forbidden=tuple(
             SchemaForbiddenEntry(
-                name=e.name,
-                const=e.const,
-                enum=e.enum,
-                pattern=e.pattern,
-                description=e.description,
+                name=entry.name,
+                const=entry.const,
+                enum=entry.enum,
+                pattern=entry.pattern,
+                description=entry.description,
             )
-            for e in entries
+            for entry in entries
         ),
     )
 
 
 def build_semantic_ext(
-    sc: SemanticConstraint | None,
+    semantic_constraint: SemanticConstraint | None,
 ) -> SchemaSemanticExt | None:
     """Convert a SemanticConstraint to output form, or None.
 
     Empty tuples become None so exclude_none=True omits them.
     """
-    if sc is None:
+    if semantic_constraint is None:
         return None
     return SchemaSemanticExt(
-        intent=sc.intent,
-        severity=sc.severity,
-        checks=sc.checks if sc.checks else None,
-        anti_patterns=sc.anti_patterns if sc.anti_patterns else None,
+        intent=semantic_constraint.intent,
+        severity=semantic_constraint.severity,
+        checks=semantic_constraint.checks if semantic_constraint.checks else None,
+        anti_patterns=semantic_constraint.anti_patterns if semantic_constraint.anti_patterns else None,
     )
 
 
@@ -152,14 +152,14 @@ def is_field_required(field: ResolvedField) -> bool:
     return False
 
 
-def is_cross_group_conditional(cond: ConditionalRequirement) -> bool:
+def is_cross_group_conditional(conditional: ConditionalRequirement) -> bool:
     """Check if a conditional references a field in another group.
 
     Cross-group conditionals use dot-path field references like
     'task.return.return_mode'. These cannot be emitted as local
     conditionals — they must be deferred to the schema root.
     """
-    return "." in cond.field
+    return "." in conditional.field
 
 
 def classify_field_requirement(
@@ -178,38 +178,38 @@ def classify_field_requirement(
     if isinstance(field.requirement, RequirementCondition):
         if is_cross_group_conditional(field.requirement.only_when):
             return (None, None)  # deferred to schema root (Phase 4)
-        cond = build_only_when_conditional(
+        conditional = build_only_when_conditional(
             field.requirement.only_when, field.name,
         )
-        return (None, cond)
+        return (None, conditional)
     return (None, None)
 
 
 def build_only_when_conditional(
-    cond: ConditionalRequirement,
+    requirement: ConditionalRequirement,
     field_name: str,
 ) -> SchemaConditional:
     """Build an if/then/else conditional for an only_when requirement."""
     return SchemaConditional(
-        if_=build_condition_if_clause(cond),
+        if_=build_condition_if_clause(requirement),
         then_=SchemaCondition(required=(field_name,)),
         else_=SchemaCondition(properties={field_name: False}),
     )
 
 
 def build_condition_if_clause(
-    cond: ConditionalRequirement,
+    requirement: ConditionalRequirement,
 ) -> SchemaCondition:
     """Build the if-clause for a conditional requirement."""
-    if cond.present is not None:
-        return SchemaCondition(required=(cond.field,))
-    if cond.in_values is not None:
-        constraint = SchemaEnumConstraint(enum=cond.in_values)
-        return SchemaCondition(properties={cond.field: constraint})
-    if cond.equals is not None:
-        constraint = SchemaConst(const=cond.equals)
-        return SchemaCondition(properties={cond.field: constraint})
-    return SchemaCondition(required=(cond.field,))
+    if requirement.present is not None:
+        return SchemaCondition(required=(requirement.field,))
+    if requirement.in_values is not None:
+        constraint = SchemaEnumConstraint(enum=requirement.in_values)
+        return SchemaCondition(properties={requirement.field: constraint})
+    if requirement.equals is not None:
+        constraint = SchemaConst(const=requirement.equals)
+        return SchemaCondition(properties={requirement.field: constraint})
+    return SchemaCondition(required=(requirement.field,))
 
 
 def classify_array_requirement(
@@ -231,10 +231,10 @@ def classify_array_requirement(
             return (arr.name, None)
         return (None, None)
     if isinstance(arr.requirement, RequirementCondition):
-        cond = build_only_when_conditional(
+        conditional = build_only_when_conditional(
             arr.requirement.only_when, arr.name,
         )
-        return (None, cond)
+        return (None, conditional)
     return (None, None)
 
 
@@ -271,22 +271,22 @@ def collect_group_contents(
     conditionals: list[SchemaConditional] = []
     for field in group.fields:
         properties[field.name] = build_field(field)
-        req_name, cond = classify_field_requirement(field)
+        req_name, conditional = classify_field_requirement(field)
         if req_name is not None:
             required.append(req_name)
-        if cond is not None:
-            conditionals.append(cond)
+        if conditional is not None:
+            conditionals.append(conditional)
     for sub in group.sub_groups:
         properties[sub.name] = build_group(sub)
         if sub.name in group.required_fields:
             required.append(sub.name)
     for arr in group.arrays:
         properties[arr.name] = build_array(arr)
-        req_name, cond = classify_array_requirement(arr, group.required_fields)
+        req_name, conditional = classify_array_requirement(arr, group.required_fields)
         if req_name is not None:
             required.append(req_name)
-        if cond is not None:
-            conditionals.append(cond)
+        if conditional is not None:
+            conditionals.append(conditional)
     return properties, required, conditionals
 
 
@@ -327,10 +327,10 @@ def build_section(section: ResolvedSection) -> SchemaObject:
     """Convert a ResolvedSection to a SchemaObject output model."""
     properties: dict[str, SchemaField | SchemaObject | SchemaArray] = {}
     required: list[str] = []
-    for comp in section.components:
-        properties[comp.name] = build_group(comp)
-        if comp.name in section.required_fields:
-            required.append(comp.name)
+    for component in section.components:
+        properties[component.name] = build_group(component)
+        if component.name in section.required_fields:
+            required.append(component.name)
     for arr in section.arrays:
         properties[arr.name] = build_array(arr)
         if arr.name in section.required_fields:
@@ -395,28 +395,28 @@ def scan_group_for_deferred(
 
 
 def build_root_conditional(
-    cond: ConditionalRequirement,
+    requirement: ConditionalRequirement,
     field_name: str,
     field_path: tuple[str, ...],
 ) -> SchemaRootConditional:
     """Build a root-level if/then/else for a cross-section conditional."""
     return SchemaRootConditional(
-        if_=build_root_if_clause(cond),
+        if_=build_root_if_clause(requirement),
         then_=build_nested_required(field_path, field_name),
         else_=build_nested_forbidden(field_path, field_name),
     )
 
 
 def build_root_if_clause(
-    cond: ConditionalRequirement,
+    requirement: ConditionalRequirement,
 ) -> SchemaNestedPath:
     """Build the nested if-clause for a cross-section conditional."""
-    segments = tuple(cond.field.split("."))
-    if cond.in_values is not None:
-        leaf = SchemaEnumConstraint(enum=cond.in_values)
+    segments = tuple(requirement.field.split("."))
+    if requirement.in_values is not None:
+        leaf = SchemaEnumConstraint(enum=requirement.in_values)
         return build_nested_property(segments, leaf)
-    if cond.equals is not None:
-        leaf = SchemaConst(const=cond.equals)
+    if requirement.equals is not None:
+        leaf = SchemaConst(const=requirement.equals)
         return build_nested_property(segments, leaf)
     return build_nested_required(segments[:-1], segments[-1])
 

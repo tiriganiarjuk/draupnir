@@ -6,6 +6,7 @@ Every other stage in the pipeline works with typed Pydantic models.
 
 import importlib.util
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 from draupnir.structures import SchemaDocument
@@ -32,7 +33,7 @@ def write_schema(document: SchemaDocument, output_path: Path) -> Path:
     return output_path
 
 
-def load_inspect_schema(workspace_root: Path):
+def load_inspect_schema(workspace_root: Path) -> Callable[[Path], str]:
     """Import inspect_schema() from tools/inspect_schema.py."""
     script = workspace_root / "tools" / "inspect_schema.py"
     spec = importlib.util.spec_from_file_location(

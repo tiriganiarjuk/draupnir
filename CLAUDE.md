@@ -175,9 +175,9 @@ Specifics prove understanding. "I understand" proves nothing.
 | Document | Path | What it tells you |
 |---|---|---|
 | **The Plan** | `~/.claude/plans/warm-gliding-kitten.md` | Everything — architecture, structures, walk algorithm, build order |
-| **SCHEMA_COMPOSITION_EXPLAINED** | `standards/SCHEMA_COMPOSITION_EXPLAINED_BY_LLM_FOR_LLM.md` | The 8-level hierarchy, why each level exists |
-| **DEFINITION_FORMAT** | `standards/toolcompose/DEFINITION_FORMAT.md` | Full field tree with type annotations |
-| **CRITICAL_DECISIONS** | `standards/toolcompose/CRITICAL_DECISIONS.md` | Decisions D1-D10, rationale |
+| **SCHEMA_COMPOSITION_EXPLAINED** | `documentation/toolcompose/SCHEMA_COMPOSITION_EXPLAINED_BY_LLM_FOR_LLM.md` | The 8-level hierarchy, why each level exists |
+| **DEFINITION_FORMAT** | `documentation/pipeline/DEFINITION_FORMAT.md` | Full field tree with type annotations |
+| **CRITICAL_DECISIONS** | `documentation/pipeline/CRITICAL_DECISIONS.md` | Decisions D1-D10, rationale |
 
 ### Functional Programming Discipline
 | Document | Path | What it tells you |

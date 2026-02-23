@@ -305,6 +305,7 @@ def build_array(array: ResolvedArray) -> SchemaArray:
         max_items=array.max_items,
         unique_items=array.unique_items,
         x_semantic=build_semantic_ext(array.semantic),
+        x_constraint=build_constraint_block(array.constraint),
     )
 
 

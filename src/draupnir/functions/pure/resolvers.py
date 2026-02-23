@@ -363,6 +363,7 @@ def resolve_composed_array(
         max_items=composed.max_items,
         unique_items=composed.unique_items,
         semantic=composed.semantic,
+        constraint=composed.x_constraint,
     )
 
 

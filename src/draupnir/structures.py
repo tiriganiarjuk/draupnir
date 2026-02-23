@@ -485,6 +485,7 @@ class ResolvedArray(BaseModel):
     max_items: int | None = None
     unique_items: bool | None = None
     semantic: SemanticConstraint | None = None
+    constraint: tuple[ConstraintEntry, ...] | None = None
 
 
 class ResolvedSection(BaseModel):
@@ -737,6 +738,9 @@ class SchemaArray(BaseModel):
     unique_items: bool | None = Field(default=None, alias="uniqueItems")
     x_semantic: SchemaSemanticExt | None = Field(
         default=None, alias="x-semantic",
+    )
+    x_constraint: SchemaConstraintBlock | None = Field(
+        default=None, alias="x-constraint",
     )
 
 

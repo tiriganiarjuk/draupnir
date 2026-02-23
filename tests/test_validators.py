@@ -10,6 +10,7 @@ import pytest
 from pydantic import ValidationError
 
 from draupnir.structures import (
+    ArrayItemsRefList,
     RawArray,
     RawComposed,
     RawGroup,
@@ -109,8 +110,8 @@ class TestValidateArray:
             "items": [{"$ref": "item_type"}],
         }
         a = RawArray.model_validate(data)
-        assert isinstance(a.items, tuple)
-        assert a.items[0].ref == "item_type"
+        assert isinstance(a.items, ArrayItemsRefList)
+        assert a.items.root[0].ref == "item_type"
 
 
 class TestValidateSection:

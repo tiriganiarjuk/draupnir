@@ -17,6 +17,7 @@ Loaders receive PurePosixPath and handle file reading + validation.
 from pathlib import PurePosixPath
 
 from draupnir.structures import (
+    ArrayItemsRefList,
     RawArray,
     RawComposed,
     RawGroup,
@@ -24,6 +25,7 @@ from draupnir.structures import (
     RawSection,
     SchemaLoaders,
     WalkedArray,
+    WalkedFields,
     WalkedGroup,
     WalkedSchema,
     WalkedSection,
@@ -100,6 +102,42 @@ def walk_composed_to_group(
 # =============================================================================
 
 
+def walk_fields_dict(
+    fields: dict[str, str],
+    root: PurePosixPath,
+    loaders: SchemaLoaders,
+) -> WalkedFields:
+    """Walk a fields dict, classifying each entry.
+
+    Shared by groups and sections — both have fields dicts with
+    the same semantics: file paths to composed types or bare
+    primitive names.
+    """
+    thin_fields: list[RawComposed] = []
+    sub_groups: list[WalkedGroup] = []
+    composed_arrays: list[RawComposed] = []
+    for field_name, field_path in fields.items():
+        if not is_file_reference(field_path):
+            thin_fields.append(
+                synthesize_bare_primitive(field_name, field_path),
+            )
+            continue
+        composed = loaders.composed(root / field_path)
+        if is_structural_composed(composed):
+            sub_groups.append(walk_composed_to_group(composed))
+        elif is_composed_array(composed):
+            composed_arrays.append(composed)
+        elif is_blocklist_composed(composed):
+            pass  # not a property — contributes via x-not references
+        else:
+            thin_fields.append(composed)
+    return WalkedFields(
+        composed_fields=tuple(thin_fields),
+        composed_arrays=tuple(composed_arrays),
+        sub_groups=tuple(sub_groups),
+    )
+
+
 def walk_group(
     raw_group: RawGroup,
     root: PurePosixPath,
@@ -111,29 +149,13 @@ def walk_group(
     Each is loaded via the typed composed loader.
     Structural composed fields become sub-groups.
     """
-    thin_fields: list[RawComposed] = []
-    sub_groups: list[WalkedGroup] = []
-    composed_arrays: list[RawComposed] = []
-    for field_name, field_path in raw_group.fields.items():
-        if not is_file_reference(field_path):
-            thin_fields.append(synthesize_bare_primitive(field_name, field_path))
-            continue
-        composed = loaders.composed(root / field_path)
-        if is_structural_composed(composed):
-            sub_groups.append(walk_composed_to_group(composed))
-        elif is_composed_array(composed):
-            composed_arrays.append(composed)
-        elif is_blocklist_composed(composed):
-            pass  # not a property — contributes via x-not references
-        else:
-            thin_fields.append(composed)
-
+    walked = walk_fields_dict(raw_group.fields, root, loaders)
     arrays = walk_group_arrays(raw_group, root, loaders)
     return WalkedGroup(
         raw=raw_group,
-        composed_fields=tuple(thin_fields),
-        composed_arrays=tuple(composed_arrays),
-        sub_groups=tuple(sub_groups),
+        composed_fields=walked.composed_fields,
+        composed_arrays=walked.composed_arrays,
+        sub_groups=walked.sub_groups,
         arrays=tuple(arrays),
     )
 
@@ -180,11 +202,11 @@ def extract_item_refs(raw_array: RawArray) -> tuple[str, ...]:
     Handles three shapes:
     - ArrayItems with $ref (single type)
     - ArrayItems with oneOf (union)
-    - tuple[RefString, ...] (reduced form)
+    - ArrayItemsRefList (reduced form)
     """
     items = raw_array.items
-    if isinstance(items, tuple):
-        return tuple(rs.ref for rs in items)
+    if isinstance(items, ArrayItemsRefList):
+        return tuple(rs.ref for rs in items.root)
     if items.ref is not None:
         return (items.ref,)
     if items.one_of is not None:
@@ -202,7 +224,12 @@ def walk_section(
     root: PurePosixPath,
     loaders: SchemaLoaders,
 ) -> WalkedSection:
-    """Walk a section, loading its sub-component groups and arrays."""
+    """Walk a section, loading its fields, sub-components, and arrays.
+
+    Fields are processed identically to group fields (shared via
+    walk_fields_dict). Sub-components are loaded as groups.
+    """
+    walked = walk_fields_dict(raw_section.fields, root, loaders)
     components: list[WalkedGroup] = []
     for comp_name, comp_path in raw_section.sub_components.items():
         raw_group = loaders.group(root / comp_path)
@@ -210,6 +237,9 @@ def walk_section(
     arrays = walk_section_arrays(raw_section, root, loaders)
     return WalkedSection(
         raw=raw_section,
+        composed_fields=walked.composed_fields,
+        composed_arrays=walked.composed_arrays,
+        sub_groups=walked.sub_groups,
         components=tuple(components),
         arrays=tuple(arrays),
     )
@@ -255,5 +285,6 @@ def walk_schema(
         raw=raw_schema,
         sections=tuple(sections),
         groups=tuple(groups),
+        nullable_sections=raw_schema.nullable_sections,
         nullable_groups=raw_schema.nullable_groups,
     )

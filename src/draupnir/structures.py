@@ -12,7 +12,7 @@ from collections.abc import Callable
 from pathlib import PurePosixPath
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, RootModel
 
 
 # =============================================================================
@@ -248,13 +248,23 @@ class RawGroup(BaseModel):
     required_fields: tuple[str, ...] = ()
 
 
+class ArrayItemsRefList(RootModel[tuple[RefString, ...]]):
+    """Reduced form of array items: a list of $ref references.
+
+    YAML shape: [{$ref: a}, {$ref: b}]
+    Wraps tuple[RefString, ...] in a typed model for collection safety.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+
 class RawArray(BaseModel):
     """Array with typed items. Also covers superarrays.
 
     Items can be:
     - A dict with $ref (single type): {$ref: context_item}
     - A dict with oneOf (union): {oneOf: [{$ref: a}, {$ref: b}]}
-    - A list of $ref dicts (reduced form): [{$ref: name}]
+    - An ArrayItemsRefList (reduced form): [{$ref: name}]
     """
 
     model_config = ConfigDict(frozen=True)
@@ -262,13 +272,18 @@ class RawArray(BaseModel):
     name: str
     type: str  # "array"
     description: str | None = None
-    items: ArrayItems | tuple[RefString, ...]
+    items: ArrayItems | ArrayItemsRefList
 
 
 class RawSection(BaseModel):
-    """Section containing sub-components (groups and supergroups).
+    """Section containing fields, sub-components, and arrays.
 
-    Sub-components are referenced by file path.
+    Fields are primitive/composed references (same as group fields).
+    Sub-components are groups/supergroups referenced by file path.
+    Arrays are array references by file path.
+
+    Shallow sections use only fields (flat structure, no nesting).
+    Complex sections use fields + sub_components + arrays.
     The name field is the STABLE JSON field name.
     """
 
@@ -280,6 +295,7 @@ class RawSection(BaseModel):
     composition: str | None = None  # "Mixed"
     additional_properties: bool = False
     required_fields: tuple[str, ...] = ()
+    fields: dict[str, str] = Field(default_factory=dict)  # name → file path
     sub_components: dict[str, str] = Field(default_factory=dict)  # name → file path
     arrays: dict[str, str] = Field(default_factory=dict)  # name → file path
 
@@ -287,12 +303,13 @@ class RawSection(BaseModel):
 class RawSchema(BaseModel):
     """Schema root definition.
 
-    After YAML migration (Phase 5), schemas reference sections
-    by file path in the sections dict. The key is the stable JSON
-    field name, the value is the section file path.
+    Schemas reference sections by file path in the sections dict.
+    The key is the stable JSON field name, the value is the file path.
 
-    Flat schemas (e.g., render format) use groups dict instead of
-    sections — groups at root level, no intermediate section nesting.
+    Sections with fields support enable shallow sections (flat
+    structure without nesting) alongside complex sections with
+    sub-components and arrays. Groups dict is retained for
+    backward compatibility with existing schemas.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -304,6 +321,7 @@ class RawSchema(BaseModel):
     sections: dict[str, str] = Field(default_factory=dict)  # name → file path
     required_sections: tuple[str, ...] = ()
     optional_sections: tuple[str, ...] = ()
+    nullable_sections: tuple[str, ...] = ()
     groups: dict[str, str] = Field(default_factory=dict)  # name → group file path
     required_groups: tuple[str, ...] = ()
     nullable_groups: tuple[str, ...] = ()
@@ -335,6 +353,21 @@ class SchemaLoaders(BaseModel):
 # =============================================================================
 
 
+class WalkedFields(BaseModel):
+    """Intermediate result from walking a fields dict.
+
+    Shared by groups and sections — both have fields dicts with
+    the same semantics. The walker classifies each field into one
+    of three categories based on its composed type shape.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    composed_fields: tuple[RawComposed, ...] = ()
+    composed_arrays: tuple[RawComposed, ...] = ()
+    sub_groups: tuple["WalkedGroup", ...] = ()
+
+
 class WalkedGroup(BaseModel):
     """Group with its composed fields and sub-structures loaded.
 
@@ -362,11 +395,19 @@ class WalkedArray(BaseModel):
 
 
 class WalkedSection(BaseModel):
-    """Section with all sub-components and arrays loaded."""
+    """Section with fields, sub-components, and arrays loaded.
+
+    Fields are processed identically to group fields: thin composed
+    become composed_fields, structural composed become sub_groups,
+    array-type composed become composed_arrays.
+    """
 
     model_config = ConfigDict(frozen=True)
 
     raw: RawSection
+    composed_fields: tuple[RawComposed, ...] = ()
+    composed_arrays: tuple[RawComposed, ...] = ()
+    sub_groups: tuple[WalkedGroup, ...] = ()
     components: tuple[WalkedGroup, ...] = ()
     arrays: tuple[WalkedArray, ...] = ()
 
@@ -379,6 +420,7 @@ class WalkedSchema(BaseModel):
     raw: RawSchema
     sections: tuple[WalkedSection, ...] = ()
     groups: tuple[WalkedGroup, ...] = ()
+    nullable_sections: tuple[str, ...] = ()
     nullable_groups: tuple[str, ...] = ()
 
 
@@ -489,7 +531,7 @@ class ResolvedArray(BaseModel):
 
 
 class ResolvedSection(BaseModel):
-    """Section with all sub-components and arrays fully resolved."""
+    """Section with fields, sub-components, and arrays fully resolved."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -498,6 +540,8 @@ class ResolvedSection(BaseModel):
     composition: str | None = None
     additional_properties: bool = False
     required_fields: tuple[str, ...] = ()
+    fields: tuple[ResolvedField, ...] = ()
+    sub_groups: tuple[ResolvedGroup, ...] = ()
     components: tuple[ResolvedGroup, ...] = ()
     arrays: tuple[ResolvedArray, ...] = ()
 
@@ -513,6 +557,7 @@ class ResolvedSchema(BaseModel):
     additional_properties: bool = False
     required_sections: tuple[str, ...] = ()
     optional_sections: tuple[str, ...] = ()
+    nullable_sections: tuple[str, ...] = ()
     sections: tuple[ResolvedSection, ...] = ()
     groups: tuple[ResolvedGroup, ...] = ()
     required_groups: tuple[str, ...] = ()
@@ -542,19 +587,30 @@ class SchemaEnumConstraint(BaseModel):
     enum: tuple[str, ...]
 
 
+class ConditionProperties(
+    RootModel[dict[str, SchemaConst | SchemaEnumConstraint | Literal[False]]],
+):
+    """JSON Schema properties mapping for condition clauses.
+
+    Keys are field names, values are constraints (const/enum)
+    or Literal[False] for prohibition. Wraps dict in a typed
+    model for collection safety.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+
 class SchemaCondition(BaseModel):
     """Body of an if/then/else clause in JSON Schema.
 
-    Used for conditional requirements. The properties dict values
+    Used for conditional requirements. The properties values
     are constraints (const/enum) or Literal[False] for prohibition.
     """
 
     model_config = ConfigDict(frozen=True)
 
     required: tuple[str, ...] | None = None
-    properties: (
-        dict[str, SchemaConst | SchemaEnumConstraint | Literal[False]] | None
-    ) = None
+    properties: ConditionProperties | None = None
 
 
 class SchemaConditional(BaseModel):
@@ -567,26 +623,38 @@ class SchemaConditional(BaseModel):
     else_: SchemaCondition | None = Field(default=None, alias="else")
 
 
+class NestedPathProperties(
+    RootModel[
+        dict[
+            str,
+            "SchemaNestedPath | SchemaEnumConstraint | SchemaConst | Literal[False]",
+        ]
+    ],
+):
+    """JSON Schema properties mapping for nested path conditionals.
+
+    Self-referential: values can be SchemaNestedPath for further
+    nesting, constraints, or Literal[False] for prohibition.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+
 class SchemaNestedPath(BaseModel):
     """Nested property path for cross-section conditionals.
 
-    Self-referential: each level wraps the next in a properties dict.
+    Self-referential: each level wraps the next in a properties model.
     Terminal nodes carry either a constraint (enum/const), required
     list, or Literal[False] for prohibition.
     """
 
     model_config = ConfigDict(frozen=True)
 
-    properties: (
-        dict[
-            str,
-            "SchemaNestedPath | SchemaEnumConstraint | SchemaConst | Literal[False]",
-        ]
-        | None
-    ) = None
+    properties: NestedPathProperties | None = None
     required: tuple[str, ...] | None = None
 
 
+NestedPathProperties.model_rebuild()
 SchemaNestedPath.model_rebuild()
 
 

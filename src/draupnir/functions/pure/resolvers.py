@@ -196,9 +196,9 @@ def resolve_type_chain(
 INVALID_REQUIREMENTS = frozenset({"optional", "mandatory_when", "prohibited_when"})
 
 
-def is_selector(req: str | RequirementCondition | None) -> bool:
+def is_selector(requirement: str | RequirementCondition | None) -> bool:
     """Check if a requirement value is a selector (not inherit/None)."""
-    if req is None or req == "inherit":
+    if requirement is None or requirement == "inherit":
         return False
     return True
 
@@ -216,9 +216,9 @@ def resolve_requirement_chain(
     inherit or None. Violations fail the build.
     """
     chain = collect_type_chain(type_name, pool)
-    all_reqs = [composed_req] + [p.requirement for p in chain]
+    all_reqs = [composed_req] + [primitive.requirement for primitive in chain]
     validate_requirement_values(all_reqs, field_name)
-    selectors = [r for r in all_reqs if is_selector(r)]
+    selectors = [req_value for req_value in all_reqs if is_selector(req_value)]
     if len(selectors) > 1:
         raise ValueError(
             f"Field '{field_name}': multiple requirement selectors "
@@ -383,20 +383,20 @@ def resolve_walked_group(
     Recurses into sub-groups and arrays.
     """
     fields = tuple(
-        resolve_thin_composed(c, pool, blocklists)
-        for c in group.composed_fields
+        resolve_thin_composed(composed, pool, blocklists)
+        for composed in group.composed_fields
     )
     sub_groups = tuple(
-        resolve_walked_group(sg, pool, blocklists)
-        for sg in group.sub_groups
+        resolve_walked_group(walked_sub, pool, blocklists)
+        for walked_sub in group.sub_groups
     )
     file_arrays = tuple(
-        resolve_walked_array(a, pool, blocklists)
-        for a in group.arrays
+        resolve_walked_array(walked_array, pool, blocklists)
+        for walked_array in group.arrays
     )
     comp_arrays = tuple(
-        resolve_composed_array(c, pool, blocklists)
-        for c in group.composed_arrays
+        resolve_composed_array(composed, pool, blocklists)
+        for composed in group.composed_arrays
     )
     return ResolvedGroup(
         name=stabilize_name(group.raw.name),
@@ -417,7 +417,8 @@ def resolve_walked_array(
 ) -> ResolvedArray:
     """Convert a WalkedArray to a ResolvedArray."""
     items = tuple(
-        resolve_walked_group(g, pool, blocklists) for g in array.items
+        resolve_walked_group(walked_group, pool, blocklists)
+        for walked_group in array.items
     )
     return ResolvedArray(
         name=stabilize_name(array.raw.name),
@@ -431,14 +432,30 @@ def resolve_walked_section(
     pool: dict[str, RawPrimitive],
     blocklists: BlocklistPool,
 ) -> ResolvedSection:
-    """Convert a WalkedSection to a ResolvedSection."""
-    components = tuple(
-        resolve_walked_group(g, pool, blocklists)
-        for g in section.components
+    """Convert a WalkedSection to a ResolvedSection.
+
+    Fields are resolved identically to group fields (thin composed
+    via type chain, sub-groups recursively, composed arrays).
+    """
+    fields = tuple(
+        resolve_thin_composed(composed, pool, blocklists)
+        for composed in section.composed_fields
     )
-    arrays = tuple(
-        resolve_walked_array(a, pool, blocklists)
-        for a in section.arrays
+    sub_groups = tuple(
+        resolve_walked_group(walked_sub, pool, blocklists)
+        for walked_sub in section.sub_groups
+    )
+    comp_arrays = tuple(
+        resolve_composed_array(composed, pool, blocklists)
+        for composed in section.composed_arrays
+    )
+    components = tuple(
+        resolve_walked_group(walked_group, pool, blocklists)
+        for walked_group in section.components
+    )
+    file_arrays = tuple(
+        resolve_walked_array(walked_array, pool, blocklists)
+        for walked_array in section.arrays
     )
     return ResolvedSection(
         name=stabilize_name(section.raw.name),
@@ -446,8 +463,10 @@ def resolve_walked_section(
         composition=section.raw.composition,
         additional_properties=section.raw.additional_properties,
         required_fields=section.raw.required_fields,
+        fields=fields,
+        sub_groups=sub_groups,
         components=components,
-        arrays=arrays,
+        arrays=file_arrays + comp_arrays,
     )
 
 
@@ -458,12 +477,12 @@ def resolve_walked_schema(
 ) -> ResolvedSchema:
     """Convert a WalkedSchema to a ResolvedSchema."""
     sections = tuple(
-        resolve_walked_section(s, pool, blocklists)
-        for s in schema.sections
+        resolve_walked_section(walked_section, pool, blocklists)
+        for walked_section in schema.sections
     )
     groups = tuple(
-        resolve_walked_group(g, pool, blocklists)
-        for g in schema.groups
+        resolve_walked_group(walked_group, pool, blocklists)
+        for walked_group in schema.groups
     )
     return ResolvedSchema(
         name=schema.raw.name,
@@ -472,6 +491,7 @@ def resolve_walked_schema(
         additional_properties=schema.raw.additional_properties,
         required_sections=schema.raw.required_sections,
         optional_sections=schema.raw.optional_sections,
+        nullable_sections=schema.nullable_sections,
         sections=sections,
         groups=groups,
         required_groups=schema.raw.required_groups,

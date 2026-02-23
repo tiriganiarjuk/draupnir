@@ -272,8 +272,8 @@ class TestBuildConditionIfClause:
         cond = ConditionalRequirement(field="mode", equals="batch")
         result = build_condition_if_clause(cond)
         assert result.properties is not None
-        assert isinstance(result.properties["mode"], SchemaConst)
-        assert result.properties["mode"].const == "batch"
+        assert isinstance(result.properties.root["mode"], SchemaConst)
+        assert result.properties.root["mode"].const == "batch"
 
     def test_present(self) -> None:
         cond = ConditionalRequirement(field="mode", present=True)
@@ -286,8 +286,8 @@ class TestBuildConditionIfClause:
         )
         result = build_condition_if_clause(cond)
         assert result.properties is not None
-        assert isinstance(result.properties["mode"], SchemaEnumConstraint)
-        assert result.properties["mode"].enum == ("batch", "stream")
+        assert isinstance(result.properties.root["mode"], SchemaEnumConstraint)
+        assert result.properties.root["mode"].enum == ("batch", "stream")
 
 
 class TestBuildOnlyWhenConditional:
@@ -298,7 +298,7 @@ class TestBuildOnlyWhenConditional:
         assert result.then_.required == ("batch_size",)
         assert result.else_ is not None
         assert result.else_.properties is not None
-        assert result.else_.properties["batch_size"] is False
+        assert result.else_.properties.root["batch_size"] is False
 
 
 # =============================================================================

@@ -8,9 +8,11 @@ model_dump(by_alias=True, exclude_none=True) at the writer boundary.
 """
 
 from draupnir.structures import (
+    ConditionProperties,
     ConditionalRequirement,
     ConstraintEntry,
     ForbiddenEntry,
+    NestedPathProperties,
     ResolvedArray,
     ResolvedField,
     ResolvedGroup,
@@ -129,13 +131,13 @@ def build_constraint_block(
     return SchemaConstraintBlock(
         constraints=tuple(
             SchemaConstraintEntry(
-                rule=e.rule,
-                field=e.field,
-                severity=e.severity,
-                reason=e.reason,
-                **(e.model_extra or {}),
+                rule=entry.rule,
+                field=entry.field,
+                severity=entry.severity,
+                reason=entry.reason,
+                **(entry.model_extra or {}),
             )
-            for e in entries
+            for entry in entries
         ),
     )
 
@@ -194,7 +196,7 @@ def build_only_when_conditional(
     return SchemaConditional(
         if_=build_condition_if_clause(requirement),
         then_=SchemaCondition(required=(field_name,)),
-        else_=SchemaCondition(properties={field_name: False}),
+        else_=SchemaCondition(properties=ConditionProperties({field_name: False})),
     )
 
 
@@ -206,15 +208,15 @@ def build_condition_if_clause(
         return SchemaCondition(required=(requirement.field,))
     if requirement.in_values is not None:
         constraint = SchemaEnumConstraint(enum=requirement.in_values)
-        return SchemaCondition(properties={requirement.field: constraint})
+        return SchemaCondition(properties=ConditionProperties({requirement.field: constraint}))
     if requirement.equals is not None:
         constraint = SchemaConst(const=requirement.equals)
-        return SchemaCondition(properties={requirement.field: constraint})
+        return SchemaCondition(properties=ConditionProperties({requirement.field: constraint}))
     return SchemaCondition(required=(requirement.field,))
 
 
 def classify_array_requirement(
-    arr: ResolvedArray,
+    resolved_array: ResolvedArray,
     required_fields: tuple[str, ...],
 ) -> tuple[str | None, SchemaConditional | None]:
     """Classify an array's requirement as required name or conditional.
@@ -223,17 +225,17 @@ def classify_array_requirement(
     - File-ref arrays: name appears in parent group's required_fields
     - Composed arrays: carry their own .requirement field
     """
-    if arr.name in required_fields:
-        return (arr.name, None)
-    if arr.requirement is None:
+    if resolved_array.name in required_fields:
+        return (resolved_array.name, None)
+    if resolved_array.requirement is None:
         return (None, None)
-    if isinstance(arr.requirement, str):
-        if arr.requirement in ("mandatory", "required"):
-            return (arr.name, None)
+    if isinstance(resolved_array.requirement, str):
+        if resolved_array.requirement in ("mandatory", "required"):
+            return (resolved_array.name, None)
         return (None, None)
-    if isinstance(arr.requirement, RequirementCondition):
+    if isinstance(resolved_array.requirement, RequirementCondition):
         conditional = build_only_when_conditional(
-            arr.requirement.only_when, arr.name,
+            resolved_array.requirement.only_when, resolved_array.name,
         )
         return (None, conditional)
     return (None, None)
@@ -317,7 +319,7 @@ def build_array_items(
         return build_field(items)
     if len(items) == 1:
         return build_group(items[0])
-    return SchemaOneOf(one_of=tuple(build_group(g) for g in items))
+    return SchemaOneOf(one_of=tuple(build_group(group) for group in items))
 
 
 # =============================================================================
@@ -326,9 +328,26 @@ def build_array_items(
 
 
 def build_section(section: ResolvedSection) -> SchemaObject:
-    """Convert a ResolvedSection to a SchemaObject output model."""
+    """Convert a ResolvedSection to a SchemaObject output model.
+
+    Processes fields (flat primitives/composed), sub_groups (structural
+    composed), components (sub-component groups/supergroups), and arrays.
+    Fields use the same build logic as group fields.
+    """
     properties: dict[str, SchemaField | SchemaObject | SchemaArray] = {}
     required: list[str] = []
+    conditionals: list[SchemaConditional] = []
+    for field in section.fields:
+        properties[field.name] = build_field(field)
+        req_name, conditional = classify_field_requirement(field)
+        if req_name is not None:
+            required.append(req_name)
+        if conditional is not None:
+            conditionals.append(conditional)
+    for sub in section.sub_groups:
+        properties[sub.name] = build_group(sub)
+        if sub.name in section.required_fields:
+            required.append(sub.name)
     for component in section.components:
         properties[component.name] = build_group(component)
         if component.name in section.required_fields:
@@ -344,6 +363,7 @@ def build_section(section: ResolvedSection) -> SchemaObject:
         properties=properties,
         required=tuple(required) if required else None,
         additional_properties=False if not section.additional_properties else None,
+        all_of=tuple(conditionals) if conditionals else None,
         min_properties=1 if section.composition == "OneOf" else None,
     )
 
@@ -358,10 +378,17 @@ def collect_deferred_conditionals(
 ) -> tuple[SchemaRootConditional, ...]:
     """Find cross-group conditionals and build root-level allOf.
 
-    Scans both section-nested groups and root-level groups.
+    Scans section fields, section sub-groups, section components,
+    and root-level groups.
     """
     result: list[SchemaRootConditional] = []
     for section in schema.sections:
+        for sub in section.sub_groups:
+            result.extend(
+                scan_group_for_deferred(
+                    sub, (section.name, sub.name),
+                ),
+            )
         for group in section.components:
             result.extend(
                 scan_group_for_deferred(
@@ -429,10 +456,10 @@ def build_nested_property(
 ) -> SchemaNestedPath:
     """Wrap segments as nested properties with a constraint leaf."""
     if len(segments) == 1:
-        return SchemaNestedPath(properties={segments[0]: leaf})
-    return SchemaNestedPath(properties={
+        return SchemaNestedPath(properties=NestedPathProperties({segments[0]: leaf}))
+    return SchemaNestedPath(properties=NestedPathProperties({
         segments[0]: build_nested_property(segments[1:], leaf),
-    })
+    }))
 
 
 def build_nested_required(
@@ -442,9 +469,9 @@ def build_nested_required(
     """Wrap segments as nested properties ending with required."""
     if len(segments) == 0:
         return SchemaNestedPath(required=(field_name,))
-    return SchemaNestedPath(properties={
+    return SchemaNestedPath(properties=NestedPathProperties({
         segments[0]: build_nested_required(segments[1:], field_name),
-    })
+    }))
 
 
 def build_nested_forbidden(
@@ -453,10 +480,10 @@ def build_nested_forbidden(
 ) -> SchemaNestedPath:
     """Wrap segments as nested properties ending with {field: false}."""
     if len(segments) == 0:
-        return SchemaNestedPath(properties={field_name: False})
-    return SchemaNestedPath(properties={
+        return SchemaNestedPath(properties=NestedPathProperties({field_name: False}))
+    return SchemaNestedPath(properties=NestedPathProperties({
         segments[0]: build_nested_forbidden(segments[1:], field_name),
-    })
+    }))
 
 
 # =============================================================================
@@ -468,7 +495,11 @@ def build_schema_document(schema: ResolvedSchema) -> SchemaDocument:
     """Convert a ResolvedSchema to a SchemaDocument output model."""
     properties: dict[str, SchemaObject | SchemaNullableObject] = {}
     for section in schema.sections:
-        properties[section.name] = build_section(section)
+        built = build_section(section)
+        if section.name in schema.nullable_sections:
+            properties[section.name] = wrap_nullable(built)
+        else:
+            properties[section.name] = built
     for group in schema.groups:
         built = build_group(group)
         if group.name in schema.nullable_groups:
@@ -489,11 +520,11 @@ def build_schema_document(schema: ResolvedSchema) -> SchemaDocument:
     )
 
 
-def wrap_nullable(obj: SchemaObject) -> SchemaNullableObject:
+def wrap_nullable(schema_object: SchemaObject) -> SchemaNullableObject:
     """Wrap a SchemaObject as nullable: oneOf [object, null]."""
     return SchemaNullableObject(
-        one_of=(obj, SchemaNullType()),
-        description=obj.description,
+        one_of=(schema_object, SchemaNullType()),
+        description=schema_object.description,
     )
 
 

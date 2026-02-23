@@ -94,7 +94,7 @@ def load_all_primitives(directory: Path) -> list[RawPrimitive]:
     """
     if not directory.exists():
         return []
-    return [load_primitive(p) for p in sorted(directory.rglob("*.yaml"))]
+    return [load_primitive(path) for path in sorted(directory.rglob("*.yaml"))]
 
 
 STAGE_SUFFIXES = ("_resolved", "_reduced", "_merged")
@@ -107,7 +107,7 @@ def is_stage_variant(path: Path) -> bool:
     The type pool only needs base entries to avoid name collisions.
     """
     stem = path.stem
-    return any(stem.endswith(s) for s in STAGE_SUFFIXES)
+    return any(stem.endswith(suffix) for suffix in STAGE_SUFFIXES)
 
 
 def load_composed_type_adopters(directory: Path) -> list[RawPrimitive]:

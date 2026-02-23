@@ -47,16 +47,21 @@ class SemanticConstraint(BaseModel):
 
 
 class ConstraintEntry(BaseModel):
-    """Cross-field resolver constraint attached to a composed field.
+    """Resolver constraint attached to a composed field.
 
-    YAML shape: {rule: str, field: str, severity: str, reason: str}
+    YAML shape: {rule: str, field?: str, severity: str, reason: str, ...}
     Emitted as x-constraint in generated schema. Enforced by resolver.
+
+    Inter-field constraints (not_equal, not_subpath_of, required_when) use
+    ``field`` to name the target. Intra-field constraints (tuple_ordered)
+    omit ``field`` and may carry rule-specific keys (e.g., ``order``).
+    Extra keys are preserved and passed through to the schema.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="allow")
 
-    rule: str  # e.g., "not_equal", "not_subpath_of"
-    field: str  # other field name to check against
+    rule: str  # e.g., "not_equal", "not_subpath_of", "tuple_ordered"
+    field: str | None = None  # target field; None for intra-field rules
     severity: str
     reason: str
 
@@ -64,13 +69,13 @@ class ConstraintEntry(BaseModel):
 class ConditionalRequirement(BaseModel):
     """Conditional requirement — field required only when another field matches.
 
-    YAML shape: {only_when: {field: str, equals?: str, in?: [str], present?: bool}}
+    YAML shape: {only_when: {field: str, equals?: str|bool, in?: [str], present?: bool}}
     """
 
     model_config = ConfigDict(frozen=True, populate_by_name=True)
 
     field: str
-    equals: str | None = None
+    equals: str | bool | None = None
     present: bool | None = None
     in_values: tuple[str, ...] | None = Field(default=None, alias="in")
 
@@ -521,11 +526,11 @@ class ResolvedSchema(BaseModel):
 
 
 class SchemaConst(BaseModel):
-    """JSON Schema const constraint: {"const": "value"}."""
+    """JSON Schema const constraint: {"const": "value"} or {"const": true}."""
 
     model_config = ConfigDict(frozen=True)
 
-    const: str
+    const: str | bool
 
 
 class SchemaEnumConstraint(BaseModel):
@@ -636,10 +641,10 @@ class SchemaSemanticExt(BaseModel):
 class SchemaConstraintEntry(BaseModel):
     """A single entry in the x-constraint block."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="allow")
 
     rule: str
-    field: str
+    field: str | None = None
     severity: str
     reason: str
 

@@ -133,6 +133,7 @@ def build_constraint_block(
                 field=e.field,
                 severity=e.severity,
                 reason=e.reason,
+                **(e.model_extra or {}),
             )
             for e in entries
         ),

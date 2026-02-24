@@ -142,17 +142,22 @@ def walk_group(
     raw_group: RawGroup,
     root: PurePosixPath,
     loaders: SchemaLoaders,
+    source_ref: str | None = None,
 ) -> WalkedGroup:
     """Walk a group, loading its composed fields and arrays.
 
     Fields dict values are file paths relative to toolcompose root.
     Each is loaded via the typed composed loader.
     Structural composed fields become sub-groups.
+
+    source_ref: file path that produced this group (for $defs dedup).
+    None for synthetic groups created from structural composed fields.
     """
     walked = walk_fields_dict(raw_group.fields, root, loaders)
     arrays = walk_group_arrays(raw_group, root, loaders)
     return WalkedGroup(
         raw=raw_group,
+        source_ref=source_ref,
         composed_fields=walked.composed_fields,
         composed_arrays=walked.composed_arrays,
         sub_groups=walked.sub_groups,
@@ -192,7 +197,7 @@ def walk_array(
     items: list[WalkedGroup] = []
     for ref_path in item_refs:
         raw_group = loaders.group(root / ref_path)
-        items.append(walk_group(raw_group, root, loaders))
+        items.append(walk_group(raw_group, root, loaders, source_ref=ref_path))
     return WalkedArray(raw=raw_array, items=tuple(items))
 
 
@@ -233,7 +238,7 @@ def walk_section(
     components: list[WalkedGroup] = []
     for comp_name, comp_path in raw_section.sub_components.items():
         raw_group = loaders.group(root / comp_path)
-        components.append(walk_group(raw_group, root, loaders))
+        components.append(walk_group(raw_group, root, loaders, source_ref=comp_path))
     arrays = walk_section_arrays(raw_section, root, loaders)
     return WalkedSection(
         raw=raw_section,
@@ -280,7 +285,7 @@ def walk_schema(
     groups: list[WalkedGroup] = []
     for group_name, group_path in raw_schema.groups.items():
         raw_group = loaders.group(root / group_path)
-        groups.append(walk_group(raw_group, root, loaders))
+        groups.append(walk_group(raw_group, root, loaders, source_ref=group_path))
     return WalkedSchema(
         raw=raw_schema,
         sections=tuple(sections),

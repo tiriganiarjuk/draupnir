@@ -11,6 +11,7 @@ from draupnir.structures import (
     RequirementCondition,
     SchemaConst,
     SchemaEnumConstraint,
+    SchemaRef,
     SemanticConstraint,
     ValidationConstraint,
 )
@@ -18,8 +19,10 @@ from draupnir.functions.pure.builders import (
     build_array,
     build_array_items,
     build_condition_if_clause,
+    build_defs,
     build_field,
     build_group,
+    build_group_object,
     build_nested_forbidden,
     build_nested_property,
     build_nested_required,
@@ -33,6 +36,7 @@ from draupnir.functions.pure.builders import (
     classify_array_requirement,
     classify_field_requirement,
     collect_deferred_conditionals,
+    collect_shared_groups,
     is_cross_group_conditional,
     is_field_required,
     scan_group_for_deferred,
@@ -911,3 +915,200 @@ class TestCollectDeferredConditionals:
         dumped = result[0].model_dump(by_alias=True, exclude_none=True)
         then_path = dumped["then"]["properties"]["security"]["properties"]["security_top"]["properties"]["io"]
         assert then_path == {"required": ("output_kind",)}
+
+
+# =============================================================================
+# $DEFS / $REF DEDUPLICATION
+# =============================================================================
+
+
+def _make_shared_schema() -> ResolvedSchema:
+    """Build a schema with the same group referenced by two arrays.
+
+    Simulates the render_parameter_item case: both input.parameters
+    and dispatcher.parameters reference the same group file.
+    """
+    shared_group = ResolvedGroup(
+        name="parameter_item",
+        source_ref="groups/render_parameter_item.yaml",
+        fields=(
+            ResolvedField(name="name", json_type="string", requirement="mandatory"),
+            ResolvedField(name="value", json_type="string"),
+        ),
+    )
+    shared_group_dup = ResolvedGroup(
+        name="parameter_item",
+        source_ref="groups/render_parameter_item.yaml",
+        fields=(
+            ResolvedField(name="name", json_type="string", requirement="mandatory"),
+            ResolvedField(name="value", json_type="string"),
+        ),
+    )
+    arr_input = ResolvedArray(
+        name="parameters", items=(shared_group,),
+    )
+    arr_dispatch = ResolvedArray(
+        name="parameters", items=(shared_group_dup,),
+    )
+    input_group = ResolvedGroup(
+        name="input", arrays=(arr_input,),
+    )
+    dispatch_group = ResolvedGroup(
+        name="dispatcher", arrays=(arr_dispatch,),
+    )
+    section_input = ResolvedSection(
+        name="input", components=(input_group,),
+    )
+    section_dispatch = ResolvedSection(
+        name="dispatcher", components=(dispatch_group,),
+    )
+    return ResolvedSchema(
+        name="universal-render",
+        version=1,
+        description="Test schema with shared groups.",
+        sections=(section_input, section_dispatch),
+        required_sections=("input", "dispatcher"),
+    )
+
+
+class TestCollectSharedGroups:
+    def test_finds_duplicates(self) -> None:
+        """Two arrays referencing same source_ref → detected as shared."""
+        schema = _make_shared_schema()
+        shared = collect_shared_groups(schema)
+        assert "groups/render_parameter_item.yaml" in shared
+        assert shared["groups/render_parameter_item.yaml"].name == "parameter_item"
+
+    def test_ignores_unique(self) -> None:
+        """Groups with different source_refs → not shared."""
+        group_a = ResolvedGroup(
+            name="a", source_ref="groups/a.yaml",
+        )
+        group_b = ResolvedGroup(
+            name="b", source_ref="groups/b.yaml",
+        )
+        arr_a = ResolvedArray(name="items_a", items=(group_a,))
+        arr_b = ResolvedArray(name="items_b", items=(group_b,))
+        section = ResolvedSection(
+            name="sec", arrays=(arr_a, arr_b),
+        )
+        schema = ResolvedSchema(
+            name="test", version=1, description="Test.",
+            sections=(section,),
+        )
+        shared = collect_shared_groups(schema)
+        assert len(shared) == 0
+
+    def test_ignores_none_source_ref(self) -> None:
+        """Synthetic groups (source_ref=None) → never counted."""
+        synthetic = ResolvedGroup(name="synth", source_ref=None)
+        arr = ResolvedArray(name="items", items=(synthetic,))
+        section = ResolvedSection(name="sec", arrays=(arr, arr))
+        schema = ResolvedSchema(
+            name="test", version=1, description="Test.",
+            sections=(section,),
+        )
+        shared = collect_shared_groups(schema)
+        assert len(shared) == 0
+
+
+class TestBuildGroupWithSharedRefs:
+    def test_emits_ref_for_shared(self) -> None:
+        """Group with source_ref in shared_refs → SchemaRef."""
+        group = ResolvedGroup(
+            name="parameter_item",
+            source_ref="groups/render_parameter_item.yaml",
+        )
+        shared_refs = frozenset({"groups/render_parameter_item.yaml"})
+        result = build_group(group, shared_refs)
+        assert isinstance(result, SchemaRef)
+        assert result.ref == "#/$defs/parameter_item"
+
+    def test_inlines_when_not_shared(self) -> None:
+        """Group without source_ref in shared_refs → SchemaObject."""
+        group = ResolvedGroup(
+            name="unique_group",
+            source_ref="groups/unique.yaml",
+        )
+        shared_refs = frozenset({"groups/other.yaml"})
+        result = build_group(group, shared_refs)
+        assert not isinstance(result, SchemaRef)
+        assert result.type == "object"
+
+    def test_inlines_when_no_shared_refs(self) -> None:
+        """No shared_refs parameter → normal inline build."""
+        group = ResolvedGroup(name="test_group")
+        result = build_group(group)
+        assert not isinstance(result, SchemaRef)
+        assert result.type == "object"
+
+
+class TestBuildGroupObject:
+    def test_builds_full_content(self) -> None:
+        """build_group_object always builds inline, never $ref."""
+        group = ResolvedGroup(
+            name="parameter_item",
+            source_ref="groups/render_parameter_item.yaml",
+            fields=(
+                ResolvedField(name="name", json_type="string"),
+            ),
+        )
+        shared_refs = frozenset({"groups/render_parameter_item.yaml"})
+        result = build_group_object(group, shared_refs)
+        assert result.type == "object"
+        assert "name" in result.properties
+
+
+class TestBuildDefs:
+    def test_builds_defs_from_shared(self) -> None:
+        """Shared groups → $defs dict keyed by group name."""
+        group = ResolvedGroup(
+            name="parameter_item",
+            source_ref="groups/render_parameter_item.yaml",
+            fields=(
+                ResolvedField(name="name", json_type="string"),
+            ),
+        )
+        shared = {"groups/render_parameter_item.yaml": group}
+        shared_refs = frozenset(shared.keys())
+        defs = build_defs(shared, shared_refs)
+        assert "parameter_item" in defs
+        assert defs["parameter_item"].type == "object"
+        assert "name" in defs["parameter_item"].properties
+
+
+class TestSchemaDocumentWithDefs:
+    def test_shared_groups_produce_defs(self) -> None:
+        """Full schema with shared groups → $defs and $ref in output."""
+        schema = _make_shared_schema()
+        doc = build_schema_document(schema)
+        dumped = doc.model_dump(by_alias=True, exclude_none=True)
+        assert "$defs" in dumped
+        assert "parameter_item" in dumped["$defs"]
+        # Both arrays should reference via $ref
+        input_params = dumped["properties"]["input"]["properties"]["input"]["properties"]["parameters"]
+        assert input_params["items"] == {"$ref": "#/$defs/parameter_item"}
+        dispatch_params = dumped["properties"]["dispatcher"]["properties"]["dispatcher"]["properties"]["parameters"]
+        assert dispatch_params["items"] == {"$ref": "#/$defs/parameter_item"}
+
+    def test_no_shared_no_defs(self) -> None:
+        """Schema without shared groups → no $defs in output."""
+        schema = ResolvedSchema(
+            name="test", version=1, description="Test.",
+        )
+        doc = build_schema_document(schema)
+        dumped = doc.model_dump(by_alias=True, exclude_none=True)
+        assert "$defs" not in dumped
+
+    def test_defs_content_matches_inline(self) -> None:
+        """$defs entry content matches what inline would have been."""
+        schema = _make_shared_schema()
+        shared = collect_shared_groups(schema)
+        shared_refs = frozenset(shared.keys())
+        defs = build_defs(shared, shared_refs)
+        # Build the same group without $ref to compare
+        group = shared["groups/render_parameter_item.yaml"]
+        inline = build_group_object(group, None)
+        defs_entry = defs["parameter_item"]
+        assert defs_entry.description == inline.description
+        assert set(defs_entry.properties.keys()) == set(inline.properties.keys())

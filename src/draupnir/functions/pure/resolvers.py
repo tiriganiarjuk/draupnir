@@ -400,6 +400,7 @@ def resolve_walked_group(
     )
     return ResolvedGroup(
         name=stabilize_name(group.raw.name),
+        source_ref=group.source_ref,
         description=group.raw.description,
         composition=group.raw.composition,
         additional_properties=group.raw.additional_properties,

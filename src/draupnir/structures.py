@@ -374,11 +374,16 @@ class WalkedGroup(BaseModel):
     The walker followed file references and loaded each YAML
     into the appropriate Raw model. This wraps a RawGroup with
     its loaded children.
+
+    source_ref: file path that produced this group (None for synthetic
+    groups created from structural composed fields). Used downstream
+    by builders to detect reusable groups for $defs emission.
     """
 
     model_config = ConfigDict(frozen=True)
 
     raw: RawGroup
+    source_ref: str | None = None
     composed_fields: tuple[RawComposed, ...] = ()
     composed_arrays: tuple[RawComposed, ...] = ()  # type="array" composed fields
     sub_groups: tuple["WalkedGroup", ...] = ()  # structural composed → nested groups
@@ -496,11 +501,16 @@ class ResolvedGroup(BaseModel):
     Covers regular groups, supergroups, and composed structural types.
     Fields are resolved leaf properties. Sub-groups are nested objects
     (from composed structural types). Arrays are resolved array properties.
+
+    source_ref: propagated from WalkedGroup — the YAML file path that
+    produced this group. Used by builders to detect shared groups for
+    $defs/$ref deduplication.
     """
 
     model_config = ConfigDict(frozen=True)
 
     name: str  # STABLE JSON field name
+    source_ref: str | None = None
     description: str | None = None
     composition: str | None = None
     additional_properties: bool = False
@@ -726,6 +736,19 @@ class SchemaConstraintBlock(BaseModel):
     constraints: tuple[SchemaConstraintEntry, ...]
 
 
+class SchemaRef(BaseModel):
+    """JSON Schema $ref pointer to a $defs entry.
+
+    Emitted by builders when a group appears multiple times in the
+    same schema. The first occurrence goes into $defs; subsequent
+    occurrences become $ref pointers.
+    """
+
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
+
+    ref: str = Field(alias="$ref")
+
+
 class SchemaField(BaseModel):
     """JSON Schema property for a leaf field.
 
@@ -767,7 +790,7 @@ class SchemaObject(BaseModel):
     type: str = "object"
     description: str | None = None
     properties: dict[
-        str, "SchemaField | SchemaObject | SchemaArray"
+        str, "SchemaField | SchemaObject | SchemaArray | SchemaRef"
     ] = Field(default_factory=dict)
     required: tuple[str, ...] | None = None
     additional_properties: bool | None = Field(
@@ -786,7 +809,7 @@ class SchemaOneOf(BaseModel):
 
     model_config = ConfigDict(frozen=True, populate_by_name=True)
 
-    one_of: tuple[SchemaObject, ...] = Field(alias="oneOf")
+    one_of: tuple[SchemaObject | SchemaRef, ...] = Field(alias="oneOf")
 
 
 class SchemaArray(BaseModel):
@@ -800,7 +823,7 @@ class SchemaArray(BaseModel):
 
     type: str = "array"
     description: str | None = None
-    items: SchemaObject | SchemaOneOf | SchemaField
+    items: SchemaObject | SchemaOneOf | SchemaField | SchemaRef
     min_items: int | None = Field(default=None, alias="minItems")
     max_items: int | None = Field(default=None, alias="maxItems")
     unique_items: bool | None = Field(default=None, alias="uniqueItems")
@@ -849,11 +872,14 @@ class SchemaDocument(BaseModel):
     description: str
     type: str = "object"
     required: tuple[str, ...] | None = None
-    properties: dict[str, SchemaObject | SchemaNullableObject] = Field(
+    properties: dict[str, SchemaObject | SchemaNullableObject | SchemaRef] = Field(
         default_factory=dict,
     )
     additional_properties: bool | None = Field(
         default=None, alias="additionalProperties",
+    )
+    defs: dict[str, SchemaObject] | None = Field(
+        default=None, alias="$defs",
     )
     all_of: tuple[SchemaRootConditional, ...] | None = Field(
         default=None, alias="allOf",

@@ -12,10 +12,6 @@ from pydantic import BaseModel
 from draupnir.functions.pure.build_fields import (
     build_conditional_entry,
     build_field,
-    build_simple,
-    build_simplearray,
-    build_simplegroup,
-    build_tuple,
 )
 from draupnir.structures.complex_containers import (
     Array,
@@ -24,12 +20,15 @@ from draupnir.structures.complex_containers import (
     Superarray,
     SuperarrayOneOf,
 )
+from draupnir.structures.fields import Union_
 from draupnir.structures.schema_output import (
     SchemaArray,
     SchemaConditional,
     SchemaObject,
     SchemaOneOf,
+    SchemaOneOfField,
     SchemaRef,
+    SchemaTupleArray,
 )
 from draupnir.structures.simple_containers import (
     Simplearray,
@@ -63,6 +62,80 @@ def build_or_ref(
     return build_model(model, reverse, shared, defs)
 
 
+def build_simplegroup_refs(
+    simplegroup: Simplegroup,
+    reverse: dict[int, str],
+    shared: frozenset[str],
+    defs: dict[str, BaseModel],
+) -> SchemaObject:
+    """Simplegroup -> {type: object} with $defs-aware field building."""
+    properties: dict[str, BaseModel] = {}
+    required_keys: list[str] = []
+    for zone, is_required in ((simplegroup.required, True), (simplegroup.optional, False)):
+        if zone:
+            for name, ref in zone.items():
+                properties[name] = build_or_ref(ref, reverse, shared, defs)
+                if is_required:
+                    required_keys.append(name)
+    conditionals: list[SchemaConditional] = []
+    if simplegroup.conditional:
+        for name, entry in simplegroup.conditional.items():
+            properties[name] = build_or_ref(entry.ref, reverse, shared, defs)
+            conditionals.append(
+                build_conditional_entry(name, entry.only_when, entry.always_when, entry.not_when),
+            )
+    return SchemaObject(
+        properties=properties,
+        required=tuple(required_keys) if required_keys else None,
+        additional_properties=False,
+        all_of=tuple(conditionals) if conditionals else None,
+        description=simplegroup.description,
+    )
+
+
+def build_tuple_refs(
+    tuple_model: Tuple_,
+    reverse: dict[int, str],
+    shared: frozenset[str],
+    defs: dict[str, BaseModel],
+) -> SchemaTupleArray:
+    """Tuple -> {prefixItems, items: false} with $defs-aware item building."""
+    prefix = tuple(build_or_ref(item, reverse, shared, defs) for item in tuple_model.items)
+    return SchemaTupleArray(
+        prefix_items=prefix,
+        description=tuple_model.description,
+        min_items=len(prefix),
+        max_items=len(prefix),
+    )
+
+
+def build_simplearray_refs(
+    simplearray: Simplearray,
+    reverse: dict[int, str],
+    shared: frozenset[str],
+    defs: dict[str, BaseModel],
+) -> SchemaArray:
+    """Simplearray -> {type: array, items} with $defs-aware item building."""
+    return SchemaArray(
+        items=build_or_ref(simplearray.items, reverse, shared, defs),
+        description=simplearray.description,
+    )
+
+
+def build_union_refs(
+    union_model: Union_,
+    reverse: dict[int, str],
+    shared: frozenset[str],
+    defs: dict[str, BaseModel],
+) -> SchemaOneOfField:
+    """Union -> {oneOf: [member schemas or $refs]}."""
+    members = tuple(
+        build_or_ref(member, reverse, shared, defs)
+        for member in union_model.union
+    )
+    return SchemaOneOfField(one_of=members, description=union_model.description)
+
+
 def build_model(
     model: BaseModel,
     reverse: dict[int, str],
@@ -71,11 +144,13 @@ def build_model(
 ) -> BaseModel:
     """Dispatch any Verdandi model to its builder."""
     if isinstance(model, Simplegroup):
-        return build_simplegroup(model)
+        return build_simplegroup_refs(model, reverse, shared, defs)
     if isinstance(model, Tuple_):
-        return build_tuple(model)
+        return build_tuple_refs(model, reverse, shared, defs)
     if isinstance(model, Simplearray):
-        return build_simplearray(model)
+        return build_simplearray_refs(model, reverse, shared, defs)
+    if isinstance(model, Union_):
+        return build_union_refs(model, reverse, shared, defs)
     if isinstance(model, Group):
         return build_group(model, reverse, shared, defs)
     if isinstance(model, Array):
@@ -138,14 +213,14 @@ def build_group_properties(
     if group.fields:
         if group.fields.required:
             for name, ref in group.fields.required.items():
-                properties[name] = build_simple(ref)
+                properties[name] = build_or_ref(ref, reverse, shared, defs)
                 required_keys.append(name)
         if group.fields.optional:
             for name, ref in group.fields.optional.items():
-                properties[name] = build_simple(ref)
+                properties[name] = build_or_ref(ref, reverse, shared, defs)
         if group.fields.conditional:
             for name, entry in group.fields.conditional.items():
-                properties[name] = build_simple(entry.ref)
+                properties[name] = build_or_ref(entry.ref, reverse, shared, defs)
                 conditionals.append(
                     build_conditional_entry(name, entry.only_when, entry.always_when, entry.not_when),
                 )
@@ -220,15 +295,15 @@ def build_shallowsection(
 
     if shallowsection.required:
         for name, ref in shallowsection.required.items():
-            properties[name] = build_field(ref)
+            properties[name] = build_or_ref(ref, reverse, shared, defs)
             required_keys.append(name)
     if shallowsection.optional:
         for name, ref in shallowsection.optional.items():
-            properties[name] = build_field(ref)
+            properties[name] = build_or_ref(ref, reverse, shared, defs)
 
     if shallowsection.conditional:
         for name, entry in shallowsection.conditional.items():
-            properties[name] = build_simple(entry.ref)
+            properties[name] = build_or_ref(entry.ref, reverse, shared, defs)
             conditionals.append(
                 build_conditional_entry(name, entry.only_when, entry.always_when, entry.not_when),
             )

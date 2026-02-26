@@ -2,9 +2,10 @@
 
 Converts Verdandi field models (Pattern, Atom, Enum, Element, Union)
 and simple containers (Tuple, Simplearray, Simplegroup) into JSON Schema
-output models. These are always inlined — never $defs candidates.
+output models. These builders are $defs-unaware — they produce inline
+schemas. Callers route through build_or_ref() for $defs extraction.
 
-No IO. No $defs awareness. Pure model-to-model conversion.
+No IO. Pure model-to-model conversion.
 """
 
 from pydantic import BaseModel
@@ -20,6 +21,7 @@ from draupnir.structures.fields import (
     Union_,
 )
 from draupnir.structures.schema_output import (
+    SchemaAnyOfConstraint,
     SchemaArray,
     SchemaCondition,
     SchemaConditional,
@@ -28,6 +30,7 @@ from draupnir.structures.schema_output import (
     SchemaField,
     SchemaObject,
     SchemaOneOfField,
+    SchemaPatternConstraint,
     SchemaTupleArray,
 )
 from draupnir.structures.simple_containers import (
@@ -37,12 +40,25 @@ from draupnir.structures.simple_containers import (
 )
 
 
+def build_excludes(
+    excludes: tuple[Pattern, ...],
+) -> SchemaPatternConstraint | SchemaAnyOfConstraint:
+    """Convert Verdandi excludes patterns to JSON Schema not constraint."""
+    if len(excludes) == 1:
+        return SchemaPatternConstraint(pattern=excludes[0].regex)
+    return SchemaAnyOfConstraint(
+        any_of=tuple(SchemaPatternConstraint(pattern=p.regex) for p in excludes),
+    )
+
+
 def build_atom(atom: Atom) -> SchemaField:
-    """Atom -> {type, pattern?, description}."""
+    """Atom -> {type, pattern?, not?, description}."""
     pattern = atom.pattern.regex if atom.pattern else None
+    not_constraint = build_excludes(atom.excludes) if atom.excludes else None
     return SchemaField(
         type=atom.type,
         pattern=pattern,
+        not_=not_constraint,
         description=atom.description,
     )
 
@@ -63,6 +79,7 @@ def build_element(element: Element) -> SchemaField:
         type=base.type,
         pattern=base.pattern,
         enum=base.enum,
+        not_=base.not_ if isinstance(base, SchemaField) else None,
         format=element.format,
         description=element.description,
     )

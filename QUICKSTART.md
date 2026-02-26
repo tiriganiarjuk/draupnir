@@ -1,209 +1,185 @@
-# Draupnir Quickstart
+# Draupnir -- Quickstart
 
-## What It Is
+## What It Does
 
-Draupnir is a schema generator that walks YAML composition trees and produces JSON Schema files. It reads from an 8-level YAML hierarchy (primitives, composed, groups, arrays, supergroups, superarrays, sections, schemas) and outputs JSON Schema Draft 2020-12 files used to validate agent definitions in the bragi pipeline.
+Draupnir is a schema generator. It reads Verdandi YAML composition files from `tools/verdandi/` (14 level directories, ~178 files) and produces JSON Schema documents in `schemas/` (currently 12 schemas). It also generates HTML sidecar visualizations via `tools/inspect_schema.py`.
 
-It replaces the monolithic `tools/agent_schema.py` with a functional architecture: frozen Pydantic models, pure functions, IO at boundaries only.
+---
 
-The pipeline flows: **YAML source** (`standards/toolcompose/`) -> **draupnir** -> **JSON Schema** (`schemas/`) -> **nornir** (downstream validator).
-
-## How to Use It
-
-### Generate all schemas
+## How to Run
 
 ```bash
-/Users/johnny/.ai/spaces/bragi/tools/draupnir/.venv/bin/draupnir --all
+# Generate all schemas + HTML sidecars (default mode)
+draupnir
+
+# Check for drift without writing (exit 1 if any schema drifted)
+draupnir --check
+
+# List available schema filenames
+draupnir --list
+
+# Override directories
+draupnir --verdandi-dir /path/to/verdandi --output-dir /path/to/output --workspace /path/to/root
 ```
 
-### Generate one schema
+The CLI auto-discovers the workspace root by walking up from its location looking for `tools/verdandi/`.
 
+**Entry point:** defined in `pyproject.toml` as `draupnir = "draupnir.cli:main"`.
+
+**Running tests:**
 ```bash
-/Users/johnny/.ai/spaces/bragi/tools/draupnir/.venv/bin/draupnir agent-raw-definition
+cd tools/draupnir
+uv run pytest tests/
+uv run pytest tests/test_guardrails.py   # Gleipnir structural checks -- run FREQUENTLY
 ```
 
-### Check for drift (no writes)
+---
 
-```bash
-/Users/johnny/.ai/spaces/bragi/tools/draupnir/.venv/bin/draupnir --all --check
-```
+## Input / Output
 
-Exit code 0 = no drift. Exit code 1 = drift detected or schemas missing.
+**Reads:**
+- `tools/verdandi/{level}/*.yaml` -- 14 directories (pattern, enum, atom, element, union, tuple, simplearray, simplegroup, array, group, superarray, section, shallowsection, schema)
+- Each YAML file is validated into a frozen Pydantic model specific to its level
 
-### List available schemas
+**Produces:**
+- `schemas/*.schema.json` -- JSON Schema documents (Draft 2020-12)
+- `schemas/*.schema.json.html` -- HTML visualization sidecars (via inspect_schema.py)
 
-```bash
-/Users/johnny/.ai/spaces/bragi/tools/draupnir/.venv/bin/draupnir --list
-```
+**Currently generates 12 schemas**, including:
+- `agent-raw-definition.schema.json`
+- `agent-universal-format.schema.json`
+- `agent-universal-render.schema.json`
+- And 9 others for intermediate pipeline stages
 
-### Override directories
+---
 
-```bash
-/Users/johnny/.ai/spaces/bragi/tools/draupnir/.venv/bin/draupnir --all \
-  --standards-dir /path/to/toolcompose \
-  --output-dir /path/to/output
-```
+## Architecture Overview
 
-### Run tests
+### Two-Boundary IO Design
 
-```bash
-cd /Users/johnny/.ai/spaces/bragi/tools/draupnir && uv run pytest tests/
-```
-
-### Default paths
-
-- Input YAML: `/Users/johnny/.ai/spaces/bragi/standards/toolcompose/`
-- Output schemas: `/Users/johnny/.ai/spaces/bragi/schemas/`
-- HTML sidecars: Same directory as schemas, with `.html` appended to the `.schema.json` filename
-
-## Pipeline Architecture
+IO exists in exactly two files. Everything else is pure computation.
 
 ```
-loaders.py          walkers.py           resolvers.py         builders.py          writers.py
-[YAML files] ──→ [Raw models] ──→ [Walked models] ──→ [Resolved models] ──→ [Schema models] ──→ [JSON files]
-   (IO)            (pure+IO)            (pure)               (pure)              (IO)
+IMPURE: loader.py  --reads-->  Verdandi YAML
+                                   |
+                              cache (dict of frozen Pydantic models)
+                                   |
+PURE:  exporter.py  --walks-->  model tree
+       build_fields.py          |
+       build_containers.py      SchemaDocument models
+                                   |
+IMPURE: writer.py  --writes-->  JSON Schema files + HTML sidecars
 ```
 
-Six internal stages:
+### Source Layout
 
-1. **Load primitives pool** -- All primitives + thin composed type-adopters indexed by name
-2. **Load schema root** -- Parse the schema YAML (e.g., `schema/agent-raw-definition.yaml`)
-3. **Bridge sections** -- Map section names to file paths if not already explicit
-4. **Walk tree** -- Follow file references from schema -> sections -> groups -> composed/arrays
-5. **Resolve** -- Walk primitive type chains, accumulate properties, produce `ResolvedSchema`
-6. **Build** -- Convert `ResolvedSchema` to `SchemaDocument` (JSON Schema output models)
+```
+src/draupnir/
+  cli.py                         # CLI: parse args, dispatch to pipeline
+  structures/                    # Frozen Pydantic models (data only, zero methods)
+    fields.py                    # Pattern, Atom, Enum, Element, Union_
+    simple_containers.py         # Tuple_, Simplearray, Simplegroup
+    complex_containers.py        # Array, Group, Superarray
+    conditionals.py              # ConditionalWhen
+    top_level.py                 # Section, Shallowsection, Schema
+    levels.py                    # Level enum (load order = declaration order)
+    schema_output.py             # JSON Schema output models
+  functions/
+    pure/                        # No side effects
+      pydantic_validators.py     # ref_from_cache (string -> cached model)
+      build_fields.py            # Field/simple container -> JSON Schema
+      build_containers.py        # Complex container/section -> JSON Schema + $defs
+      exporter.py                # Tree walk, shared detection, SchemaDocument assembly
+    impure/                      # File IO only
+      loader.py                  # Supply-driven YAML loader
+      writer.py                  # JSON serialization + HTML sidecar
+      pipeline.py                # Orchestration (run_all, run_check, run_list)
+```
 
-Serialization (`model_dump()`) happens once at the writer boundary.
+### The Loading Pipeline
+
+1. Iterate `Level` enum in declaration order (pattern first, schema last)
+2. Glob `verdandi_root/{level_name}/*.yaml` for each level
+3. Validate each YAML file through its level's Pydantic model
+4. `BeforeValidator(ref_from_cache)` on ref fields converts string refs (e.g., `"atom/kebab_string"`) to actual cached models
+5. Lower levels load first, guaranteeing refs are in cache when higher levels validate
+
+After loading, the cache holds the entire tree as frozen models that hold their children as actual model instances (not strings, not dicts).
+
+### The Export Pipeline
+
+1. Build reverse index: `id(model) -> cache_key`
+2. Walk model tree counting ref occurrences; keys with count >= 2 are shared
+3. Build JSON Schema output models from the Verdandi input models
+4. Shared models go to `$defs`; subsequent refs become `$ref` pointers
+5. Assemble `SchemaDocument` per schema-level entry in the cache
+
+---
 
 ## What NOT to Do
 
-### The 5 Mistakes LLMs Always Make
+These are documented failure modes from previous sessions. Each has caused significant rework.
 
-These are documented from actual sessions where LLMs fought the architecture. You will want to make all of them:
+**DO NOT create a "resolve" function or step.** There is no resolution phase. Loading IS the pipeline. Pydantic BeforeValidator converts string refs to cached models during model_validate(). Every model is in final form from the moment it validates.
 
-1. **"Just delete the intermediate levels"** -- You will see supergroup -> array -> group chains and think the array level is unnecessary. It is not. Arrays hold polymorphism (oneOf). Removing the array level loses the ability to have polymorphic items. When you see a level being bypassed, fix the routing -- do not delete the level.
+**DO NOT create Raw/Resolved model pairs.** One model per level. No RawPattern/ResolvedPattern. A Pattern is a Pattern. An Atom that holds a Pattern holds the actual frozen model instance.
 
-2. **Prescribing fixes instead of asking** -- You will find hierarchy violations and immediately declare the fix. You can be right about the violation and completely wrong about the fix. Present findings, ask what the architect wants.
+**DO NOT put IO outside loader.py and writer.py.** No `Path.read_text()` in the builder. No `open()` in the exporter. Two impure files only.
 
-3. **Adding phantom levels for purity** -- When you find pragmatic exceptions (primitives referencing siblings, primitives referencing PATH_BLOCKLIST), do not suggest creating `ur-primitives/` and `ur-composed/` levels. Three documented exceptions cost less than two additional directory levels.
+**DO NOT use AfterValidator for ref types.** BeforeValidator fires first (string -> model), then union type check fires. AfterValidator would operate on the wrong type.
 
-4. **Confusing composition with flattening** -- Type adoption is NOT "turning things into strings." When `include_instruction.yaml` says `fields: {include: path_exists_any}`, it creates a typed object with a validated field. The primitive carries constraints (blocklist + existence check). The composed type carries object structure.
+**DO NOT build demand-driven recursive loading.** The architecture is supply-driven. Glob levels in order. When BeforeValidator fires, the referenced model is guaranteed in cache. Missing ref = hard error (file not found), not a recursive load trigger.
 
-5. **Creating single-consumer files** -- Each decomposed file must justify its existence through reuse. A file consumed by exactly one parent is fragmentation, not composition. The criteria include bug (YAML files that existed but were never wired in) happened because decomposition was too deep.
+**DO NOT reach for dict.** This is a canary for lost architecture. Every YAML shape is known and has a typed model. Pydantic union matching handles polymorphism. `model_dump()` happens ONCE at the writer boundary.
 
-### Never glob directories
+**DO NOT add methods to models.** Structures are frozen data containers. Zero methods. Logic lives in `functions/`.
 
-The walker follows references from the schema root. Never use `Path.glob("**/*.yaml")` to discover files. The tree tells you what to load.
+**DO NOT write functions over 50 lines.** Gleipnir enforces this. Decompose.
 
-### Never put IO in pure functions
+**DO NOT use `Any` anywhere.** Every value has a known type.
 
-Files under `functions/pure/` must not read files, write files, print, or access environment variables. If a pure function needs data from a file, the caller reads the file and passes the data in.
+**DO NOT re-export from `__init__.py`.** Always empty. Direct imports: `from draupnir.structures.fields import Pattern`.
 
-### Never add methods to structures
+**DO NOT use leading underscore names.** No `_private` functions. FP style: every function is a public composable unit.
 
-`structures.py` contains frozen Pydantic models with ZERO logic -- no methods, no `@property`, no classmethods. All logic belongs in `functions/pure/` or `functions/impure/`.
+**DO NOT call the directory `models/`.** The convention is `structures/`.
 
-### Never return dicts from pipeline functions
+---
 
-Every intermediate value is a typed Pydantic model. No `dict[str, Any]`. No `JsonDict`. Create a model in `structures.py` if you need a new shape.
+## Where to Get Required Context
 
-### Never use `Any` types
+| Resource | Location | Purpose |
+|----------|----------|---------|
+| **CLAUDE.md** | `tools/draupnir/CLAUDE.md` | Anti-patterns, recovery sources, Gleipnir discipline, context refresh protocol |
+| **Design Doc** | `tools/draupnir/DRAUPNIR_REDESIGN.md` | Full architecture (~57K): models, loading, export, $defs, gated plan, anti-patterns |
+| **Verdandi YAML** | `tools/verdandi/` | The actual input files (14 level directories) |
+| **Composition Rules** | `tools/verdandi/COMPOSITION_RULES.md` | Hierarchy spec, tier containment rules |
+| **Gleipnir Rules** | `tools/draupnir/.gleipnir/rules.toml` (inherited) | Structural constraints (50-line functions, 5 params, etc.) |
+| **Schema Output** | `schemas/*.schema.json` | The produced JSON Schema files |
+| **inspect_schema.py** | `tools/inspect_schema.py` | HTML sidecar generator called by writer |
+| **nornir** | `tools/nornir/` | Rust validation tool consuming the schemas |
 
-The data is always typed. Loaders validate YAML into Pydantic models immediately. There is no untyped data in the system.
+---
 
-### Never change `name:` fields between stages
+## Verdandi Hierarchy (What Draupnir Consumes)
 
-The `name:` field in YAML is the stable JSON field name. It never changes per pipeline stage. The filename carries the variant (e.g., `security_resolved.yaml` still has `name: security`). This is the core problem draupnir was built to solve.
+```
+Tier 1 - Fields:           pattern -> atom -> enum -> element -> union
+Tier 2 - Simple Containers: tuple, simplearray, simplegroup
+Tier 3 - Complex Containers: array, group, superarray
+Tier 4 - Top Level:         section, shallowsection, schema
+```
 
-### Never use name-based lookups for non-primitives
+Load order = bottom to top. References only point downward (a group can reference an array, but an array cannot reference a group). This is enforced by the typed ref aliases on each model.
 
-File-based structural references (field name -> file path) are used at ALL levels above primitives. Name-based type adoption is used ONLY for primitives.
+---
 
-### Never add fallback logic to the generator
+## Key Invariants
 
-Fallback logic papers over hierarchy violations. When supergroups could fall back to referencing groups directly (bypassing arrays), it meant the hierarchy was not enforced. Removing fallback logic exposed the violations, which were then fixed. Strict enforcement catches bugs. Fallbacks hide them.
-
-### Never import sideways or upward
-
-The import direction rule: import from any level below you, never from the same level or above. Documented pragmatic exceptions exist (PATH_BLOCKLIST, path_exists_* siblings). New exceptions require the same justification.
-
-### Never hardcode requirement on shared primitives
-
-Shared primitives (referenced by multiple consumers in different contexts) MUST use `requirement: inherit`. This defers to the group composition context. Hardcoding `optional` defeats AllOf composition. Hardcoding `required` forces it everywhere.
-
-### Never exceed Gleipnir constraints
-
-- Max 50 lines per function
-- Max 5 parameters per function
-- Max 4 nesting depth
-- Max 4 quarantined (IO) files
-
-### Never skip reading the plan before modifying code
-
-The design plan is at `~/.claude/plans/warm-gliding-kitten.md`. Before starting any phase of work, re-read the relevant section. Post-compaction summaries lose critical details.
-
-## Where to Get Context
-
-### Architecture and design
-
-| Document | Path | Priority |
-|---|---|---|
-| Design plan (source of truth) | `~/.claude/plans/warm-gliding-kitten.md` | Read first |
-| CLAUDE.md (anti-pattern warnings) | `/Users/johnny/.ai/spaces/bragi/tools/draupnir/CLAUDE.md` | Read first |
-| Composition hierarchy explained (5 LLM mistakes) | `/Users/johnny/.ai/spaces/bragi/documentation/toolcompose/SCHEMA_COMPOSITION_EXPLAINED_BY_LLM_FOR_LLM.md` | Read if confused about hierarchy |
-| Why schema composition is the key | `/Users/johnny/.ai/spaces/bragi/documentation/toolcompose/WHY_SCHEMA_COMPOSITION_IS_THE_KEY.md` | Read for lifecycle stage understanding |
-| Full field tree with types | `/Users/johnny/.ai/spaces/bragi/documentation/pipeline/DEFINITION_FORMAT.md` | Visual reference |
-| Critical design decisions (D1-D10) | `/Users/johnny/.ai/spaces/bragi/documentation/pipeline/CRITICAL_DECISIONS.md` | Authoritative decisions |
-| Permissions calculation (AUTHORITATIVE) | `/Users/johnny/.ai/spaces/bragi/documentation/pipeline/PERMISSIONS_CALCULATION_REVISED.md` | Read if touching security/enforcement |
-| Design reasoning (3-layer constraints, security) | `/Users/johnny/.ai/spaces/bragi/documentation/toolcompose/TOOL_COMPOSE_REASONING.md` | Read for WHY behind decisions |
-| Context loss recovery | `/Users/johnny/.ai/spaces/bragi/documentation/behavioral/REFRESH.md` | Read after compaction or when uncertain |
-
-### Source code
-
-| Module | Path | Purpose |
-|---|---|---|
-| structures.py | `tools/draupnir/src/draupnir/structures.py` | All Pydantic models (Raw, Walked, Resolved, Schema output) |
-| loaders.py | `tools/draupnir/src/draupnir/functions/impure/loaders.py` | YAML reading, Pydantic validation, SchemaLoaders factory |
-| walkers.py | `tools/draupnir/src/draupnir/functions/pure/walkers.py` | Tree walking from schema root to composed fields |
-| resolvers.py | `tools/draupnir/src/draupnir/functions/pure/resolvers.py` | Type chain resolution, walked-to-resolved conversion |
-| builders.py | `tools/draupnir/src/draupnir/functions/pure/builders.py` | Resolved models to JSON Schema output models |
-| stabilizers.py | `tools/draupnir/src/draupnir/functions/pure/stabilizers.py` | Stage suffix stripping |
-| pipeline.py | `tools/draupnir/src/draupnir/functions/impure/pipeline.py` | Stage composition (orchestrator) |
-| writers.py | `tools/draupnir/src/draupnir/functions/impure/writers.py` | JSON serialization, HTML sidecar generation |
-| commands.py | `tools/draupnir/src/draupnir/functions/impure/commands.py` | CLI command implementations |
-| cli.py | `tools/draupnir/src/draupnir/cli.py` | Argument parsing and dispatch |
-
-### Input data
-
-| Directory | Purpose |
-|---|---|
-| `standards/toolcompose/schema/` | Root schema definitions (12 YAML files) |
-| `standards/toolcompose/sections/` | Section definitions |
-| `standards/toolcompose/groups/` | Group definitions |
-| `standards/toolcompose/composed/` | Composed field definitions |
-| `standards/toolcompose/primitives/` | Primitive type definitions |
-| `standards/toolcompose/arrays/` | Array definitions |
-| `standards/toolcompose/supergroups/` | Supergroup definitions |
-| `standards/toolcompose/superarrays/` | Superarray definitions |
-
-### Output
-
-| Directory | Purpose |
-|---|---|
-| `schemas/agent-*.schema.json` | Generated JSON Schema files (12) |
-| `schemas/agent-*.schema.json.html` | HTML sidecar inspection files (12) |
-
-### Gleipnir rules
-
-| File | Purpose |
-|---|---|
-| `tools/draupnir/.gleipnir/rules.toml` | Suite-wide thresholds |
-| `tools/draupnir/src/draupnir/.gleipnir/exceptions.toml` | Per-file exceptions (currently empty) |
-
-### Related tools
-
-| Tool | Purpose |
-|---|---|
-| `tools/agent_schema.py` | Predecessor monolith (still present, being replaced) |
-| `tools/inspect_schema.py` | HTML sidecar generator (called by draupnir's writers) |
-| `tools/nornir/` | Downstream Rust validator/writer that consumes draupnir output |
+1. **Load order is declaration order** -- the `Level` enum in `levels.py` defines it
+2. **Models hold models** -- not strings, not dicts, not IDs
+3. **Cache key format** -- `"level_name/file_stem"` (e.g., `"atom/kebab_string"`)
+4. **$defs key format** -- `"level__name"` (slash replaced with double underscore)
+5. **Output filename format** -- `"name.schema.json"` (schema key without the "schema/" prefix)
+6. **All models are frozen** -- `ConfigDict(frozen=True)` on every model
+7. **12 schemas currently expected** -- `EXPECTED_SCHEMA_COUNT = 12` in test_pipeline.py

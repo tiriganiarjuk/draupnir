@@ -17,13 +17,12 @@ After compaction, you have a summary — not understanding. The summary preserve
 - Created a "resolve" function when there is no resolution step — loading IS the pipeline
 - Used AfterValidator on strings when the architecture requires BeforeValidator that converts strings to cached models
 - Built demand-driven recursive loaders when the architecture specifies supply-driven level-ordered loading
-
 - Written a function that returns `dict` to "pass through" YAML data, then tried to fix the type annotation instead of questioning the approach
 - Called Gleipnir a "linter" while trying to make guardrail violations pass — the ultimate sign of lost architecture
 
 None of them felt uncertain while doing it.
 
-**The test:** Can you state three specific constraints of this project that diverge from how you'd normally write this code? Not "I should be careful" — actual constraints, with reasons. If you can't, you don't have enough context to write code. Read the recovery sources below before proceeding.
+**The test:** Can you state three specific constraints of this project that diverge from how you'd normally write this code? Not "I should be careful" — actual constraints, with reasons. If you can't, you don't have enough context to write code. Read the CONTEXT_MAP and recovery sources below before proceeding.
 
 ---
 <!-- EVERYTHING ABOVE THIS LINE IS STANDARDIZED (except the failure examples) -->
@@ -60,7 +59,7 @@ None of them felt uncertain while doing it.
 ### Reaching for `dict` (CANARY — you may need a context refresh)
 **Detection:** If you find yourself writing `dict[str, ...]`, passing dicts between functions, building dicts from YAML data, or using dict as an intermediate representation...
 **Why it's wrong:** This system passes TYPED PYDANTIC MODELS everywhere. YAML validates straight into models. Models hold models. The builder receives models and returns models. `model_dump()` happens ONCE, at the writer boundary. If you're reaching for dict, you've lost the architecture — you're probably thinking in generic Python instead of this system's model-holds-model design.
-**Recovery:** STOP. This is a canary. Re-read DRAUPNIR_REDESIGN.md §7 and this CLAUDE.md's architecture paragraph. The answer is almost never dict — it's a typed model or a typed model field.
+**Recovery:** STOP. This is a canary. Re-read DRAUPNIR_REDESIGN.md §7 and the architecture paragraph in "Context Reminders" below. The answer is almost never dict — it's a typed model or a typed model field.
 
 ### Treating YAML data as "arbitrary" or "dynamic"
 **Detection:** If you find yourself writing "arbitrary YAML dict", "dynamic structure", "unknown shape", or handling YAML data as untyped...
@@ -312,23 +311,12 @@ Key constraints (enforced, not advisory):
 
 ---
 
-## Recovery Sources
+## Coding Discipline References
 
-### Architecture & Design
-| Document | Path | What it tells you |
-|----------|------|-------------------|
-| **Design Doc** | `tools/draupnir/DRAUPNIR_REDESIGN.md` | EVERYTHING — models, loading, export, pipeline, $defs, gated plan, anti-patterns |
-| **Gated Plan** | `DRAUPNIR_REDESIGN.md` §11 | 9 phases with gate checklists — what to build, what to verify |
-| **Anti-Pattern Watchlist** | `DRAUPNIR_REDESIGN.md` §12 | 12 temptation → correction mappings |
+These are stable methodology references not covered by the CONTEXT_MAP. They don't change
+when the project's architecture or documentation evolves.
 
-### Composition Hierarchy (what draupnir consumes)
-| Document | Path | What it tells you |
-|----------|------|-------------------|
-| **Verdandi YAML files** | `tools/verdandi/` | The actual YAML being consumed — 14 level dirs, 178 files |
-| **Migration Checklist** | `tools/verdandi/MIGRATION_CHECKLIST.md` | What Verdandi files exist and their status |
-| **COMPOSITION_RULES** | `tools/verdandi/COMPOSITION_RULES.md` | Hierarchy enforcement rules, tier containment |
-
-### Functional Programming Discipline
+### Functional Programming
 | Document | Path | What it tells you |
 |----------|------|-------------------|
 | **Hemingway Coding** | `phoenix/coding_reference/AI_BREAKTHROUGHS_HEMINGWAY_CODING.md` | Each function does ONE thing — the functional primitive |
@@ -344,7 +332,7 @@ Key constraints (enforced, not advisory):
 | **Sandbox Model** | `phoenix/coding_reference/AI_BREAKTHROUGHS_SANDBOX_MODEL.md` | "There is no door" — violations architecturally impossible |
 | **LLM Coding Quality** | `outputs/LLM_CODING_QUALITY_v2.md` | The 6 structural problems and architectural responses |
 
-### Reference (behavioral, not code to imitate)
+### Behavioral Reference (read for behavior, not code to follow)
 | Resource | What it tells you |
 |----------|-------------------|
 | `src/draupnir_old/` | Old draupnir code — read for BEHAVIOR to replicate, not code to follow |
@@ -352,17 +340,17 @@ Key constraints (enforced, not advisory):
 | `tools/inspect_schema.py` | Schema inspector — should work unchanged with new output |
 
 ---
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- EVERYTHING ABOVE THIS LINE IS BEHAVIORAL (human-maintained, empirical) -->
+<!-- EVERYTHING BELOW THIS LINE IS DYNAMIC ORIENTATION (agent-regenerated)  -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+---
 
-## Quick Orientation
+## Dynamic Orientation
 
-**What is Draupnir?** A schema generator that reads Verdandi YAML composition hierarchies and produces JSON Schema documents. Replaces `tools/agent_schema.py`.
+@./CONTEXT_MAP.md
 
-**Why rebuild?** The old draupnir consumed toolcompose YAML (7 categories). Verdandi replaces toolcompose with 14 levels in 4 tiers, path-based references, and explicit hierarchy enforcement. The architecture change is fundamental — loading IS the pipeline, models hold models, no resolution step.
-
-**What pattern does it follow?** Supply-driven loading fills a cache with frozen Pydantic models (models that hold their children as actual models, not strings). Pure builder walks the model tree to produce JSON Schema. IO at two boundaries only (loader reads, writer writes).
-
-**Where is the design?** `tools/draupnir/DRAUPNIR_REDESIGN.md`
-
-**What phase am I in?** Check git log for what's been committed. The gated plan (DRAUPNIR_REDESIGN.md §11) has 9 phases (0-8). Find the last completed gate.
-
-**Directory convention:** `structures/` not `models/`. `__init__.py` always empty. Direct imports only.
+<!-- CONTEXT_MAP.md provides: purpose, primary references, documentation references
+     with freshness flags, schema references, upstream/downstream dependencies,
+     source code map, context refresh guide, known issues / active work.
+     Regenerated by summarizer agents. Do not edit CONTEXT_MAP.md manually. -->

@@ -33,6 +33,22 @@ class SchemaEnumConstraint(BaseModel):
     enum: tuple[str | int | bool, ...]
 
 
+class SchemaPatternConstraint(BaseModel):
+    """Pattern-only schema fragment for not/anyOf constructs."""
+
+    model_config = ConfigDict(frozen=True)
+
+    pattern: str
+
+
+class SchemaAnyOfConstraint(BaseModel):
+    """anyOf wrapper for multiple pattern exclusions in not blocks."""
+
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
+
+    any_of: tuple[SchemaPatternConstraint, ...] = Field(alias="anyOf")
+
+
 class ValidationConstraint(BaseModel):
     """x-validation extension for runtime validation hints."""
 
@@ -205,6 +221,10 @@ class SchemaField(BaseModel):
     enum: tuple[str | int | bool, ...] | None = None
     default: str | bool | int | None = None
     minimum: int | None = None
+    not_: SchemaPatternConstraint | SchemaAnyOfConstraint | None = Field(
+        default=None,
+        alias="not",
+    )
     x_validation: ValidationConstraint | None = Field(
         default=None,
         alias="x-validation",
@@ -225,7 +245,7 @@ class SchemaOneOfField(BaseModel):
 
     model_config = ConfigDict(frozen=True, populate_by_name=True)
 
-    one_of: tuple[SchemaField, ...] = Field(alias="oneOf")
+    one_of: tuple[SchemaField | SchemaRef, ...] = Field(alias="oneOf")
     description: str | None = None
 
 
@@ -295,7 +315,7 @@ class SchemaTupleArray(BaseModel):
 
     type: str = "array"
     description: str | None = None
-    prefix_items: tuple[SchemaField, ...] = Field(alias="prefixItems")
+    prefix_items: tuple[SchemaField | SchemaRef, ...] = Field(alias="prefixItems")
     items: Literal[False] = False
     min_items: int | None = Field(default=None, alias="minItems")
     max_items: int | None = Field(default=None, alias="maxItems")
@@ -346,7 +366,10 @@ class SchemaDocument(BaseModel):
         default=None,
         alias="additionalProperties",
     )
-    defs: dict[str, SchemaObject | SchemaArray] | None = Field(
+    defs: dict[
+        str,
+        SchemaObject | SchemaArray | SchemaTupleArray | SchemaField | SchemaOneOfField,
+    ] | None = Field(
         default=None,
         alias="$defs",
     )

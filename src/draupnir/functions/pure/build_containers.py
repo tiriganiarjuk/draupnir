@@ -12,6 +12,8 @@ from pydantic import BaseModel
 from draupnir.functions.pure.build_fields import (
     build_conditional_entry,
     build_field,
+    convert_constraints,
+    convert_semantic,
 )
 from draupnir.structures.complex_containers import (
     Array,
@@ -24,6 +26,7 @@ from draupnir.structures.fields import Union_
 from draupnir.structures.schema_output import (
     SchemaArray,
     SchemaConditional,
+    SchemaField,
     SchemaObject,
     SchemaOneOf,
     SchemaOneOfField,
@@ -155,9 +158,22 @@ def build_verdandi_field_refs(
     """VerdandiField -> inner type schema with $defs-aware building."""
     inner = build_or_ref(vf.type, reverse, shared, defs)
     combined = concat_field_description(vf)
+    semantic = convert_semantic(vf.semantic) if vf.semantic else None
+    constraint = convert_constraints(vf.constraint) if vf.constraint else None
     if isinstance(inner, SchemaRef):
-        return SchemaRef(ref=inner.ref, description=combined)
-    return inner.model_copy(update={"description": combined})
+        return SchemaRef(
+            ref=inner.ref,
+            description=combined,
+            x_semantic=semantic,
+            x_constraint=constraint,
+        )
+    updates: dict = {"description": combined}
+    if isinstance(inner, (SchemaField, SchemaArray)):
+        if semantic:
+            updates["x_semantic"] = semantic
+        if constraint:
+            updates["x_constraint"] = constraint
+    return inner.model_copy(update=updates)
 
 
 def build_model(

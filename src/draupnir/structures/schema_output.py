@@ -200,15 +200,24 @@ class SchemaConstraintBlock(BaseModel):
 class SchemaRef(BaseModel):
     """JSON Schema $ref pointer to a $defs entry.
 
-    Optional description enables sibling keywords alongside $ref
-    (valid in JSON Schema 2020-12). Used by VerdandiField to attach
-    per-field descriptions when the inner type is a shared $defs entry.
+    Optional sibling keywords alongside $ref (valid in JSON Schema
+    2020-12). Used by VerdandiField to attach per-field descriptions,
+    semantic intent, and constraint rules when the inner type is a
+    shared $defs entry.
     """
 
     model_config = ConfigDict(frozen=True, populate_by_name=True)
 
     ref: str = Field(alias="$ref")
     description: str | None = None
+    x_semantic: SchemaSemanticExt | None = Field(
+        default=None,
+        alias="x-semantic",
+    )
+    x_constraint: SchemaConstraintBlock | None = Field(
+        default=None,
+        alias="x-constraint",
+    )
 
 
 # --- Core output types ---

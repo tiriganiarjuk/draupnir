@@ -198,11 +198,17 @@ class SchemaConstraintBlock(BaseModel):
 
 
 class SchemaRef(BaseModel):
-    """JSON Schema $ref pointer to a $defs entry."""
+    """JSON Schema $ref pointer to a $defs entry.
+
+    Optional description enables sibling keywords alongside $ref
+    (valid in JSON Schema 2020-12). Used by VerdandiField to attach
+    per-field descriptions when the inner type is a shared $defs entry.
+    """
 
     model_config = ConfigDict(frozen=True, populate_by_name=True)
 
     ref: str = Field(alias="$ref")
+    description: str | None = None
 
 
 # --- Core output types ---
@@ -368,7 +374,7 @@ class SchemaDocument(BaseModel):
     )
     defs: dict[
         str,
-        SchemaObject | SchemaArray | SchemaTupleArray | SchemaField | SchemaOneOfField,
+        SchemaObject | SchemaArray | SchemaTupleArray | SchemaField | SchemaOneOfField | SchemaRef,
     ] | None = Field(
         default=None,
         alias="$defs",

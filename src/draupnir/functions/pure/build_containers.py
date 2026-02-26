@@ -12,7 +12,6 @@ from pydantic import BaseModel
 from draupnir.functions.pure.build_fields import (
     build_conditional_entry,
     build_field,
-    build_verdandi_field,
 )
 from draupnir.structures.complex_containers import (
     Array,
@@ -138,6 +137,29 @@ def build_union_refs(
     return SchemaOneOfField(one_of=members, description=union_model.description)
 
 
+def concat_field_description(vf: VerdandiField) -> str:
+    """Build concatenated description from field + type descriptions."""
+    field_desc = vf.description.strip()
+    type_desc = vf.type.description
+    if type_desc and type_desc.strip() != field_desc:
+        return f"{field_desc}\n{type_desc.strip()}"
+    return field_desc
+
+
+def build_verdandi_field_refs(
+    vf: VerdandiField,
+    reverse: dict[int, str],
+    shared: frozenset[str],
+    defs: dict[str, BaseModel],
+) -> BaseModel:
+    """VerdandiField -> inner type schema with $defs-aware building."""
+    inner = build_or_ref(vf.type, reverse, shared, defs)
+    combined = concat_field_description(vf)
+    if isinstance(inner, SchemaRef):
+        return SchemaRef(ref=inner.ref, description=combined)
+    return inner.model_copy(update={"description": combined})
+
+
 def build_model(
     model: BaseModel,
     reverse: dict[int, str],
@@ -164,7 +186,7 @@ def build_model(
     if isinstance(model, Shallowsection):
         return build_shallowsection(model, reverse, shared, defs)
     if isinstance(model, VerdandiField):
-        return build_verdandi_field(model)
+        return build_verdandi_field_refs(model, reverse, shared, defs)
     return build_field(model)
 
 

@@ -15,6 +15,7 @@ from draupnir.structures.complex_containers import (
     Group,
     Superarray,
 )
+from draupnir.structures.field import VerdandiField
 from draupnir.structures.fields import (
     Atom,
     Element,
@@ -50,6 +51,7 @@ class Level(enum.Enum):
     element = Element
     union = Union_
     tuple = Tuple_
+    field = VerdandiField
     simplearray = Simplearray
     simplegroup = Simplegroup
     array = Array

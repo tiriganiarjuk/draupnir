@@ -37,6 +37,7 @@ from draupnir.structures.simple_containers import (
     Simplearray,
     Simplegroup,
     Tuple_,
+    VerdandiField,
 )
 
 
@@ -121,13 +122,27 @@ def build_tuple(tuple_model: Tuple_) -> SchemaTupleArray:
 def build_simplearray(simplearray: Simplearray) -> SchemaArray:
     """Simplearray -> {type: array, items: {field}}."""
     return SchemaArray(
-        items=build_field(simplearray.items),
+        items=build_simple(simplearray.items),
         description=simplearray.description,
     )
 
 
+def build_verdandi_field(vf: VerdandiField) -> SchemaField | SchemaOneOfField | SchemaTupleArray | SchemaArray:
+    """VerdandiField -> inner type schema with concatenated description."""
+    inner = build_simple(vf.type)
+    type_desc = inner.description
+    field_desc = vf.description.strip()
+    if type_desc and type_desc.strip() != field_desc:
+        combined = f"{field_desc}\n{type_desc.strip()}"
+    else:
+        combined = field_desc
+    return inner.model_copy(update={"description": combined})
+
+
 def build_simple(model: BaseModel) -> SchemaField | SchemaOneOfField | SchemaTupleArray | SchemaArray:
     """Dispatch field or simple container to its builder."""
+    if isinstance(model, VerdandiField):
+        return build_verdandi_field(model)
     if isinstance(model, Tuple_):
         return build_tuple(model)
     if isinstance(model, Simplearray):

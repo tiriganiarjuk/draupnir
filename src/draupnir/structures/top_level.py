@@ -7,7 +7,7 @@ Schema is the root — references sections, shallowsections, or both (at least o
 Ref type aliases defined here:
   ComplexContainerRef — group | array | superarray (for section components)
   ShallowContainerRef — simplearray | array | superarray | group (for shallowsection)
-  ShallowFieldConditionalRef — field-level + tuple (shallowsection conditionals)
+  ShallowFieldConditionalRef — VerdandiField only (shallowsection conditionals)
   SectionOnlyRef — section only (for schema.sections)
   ShallowsectionOnlyRef — shallowsection only (for schema.shallowsections)
 """
@@ -23,17 +23,10 @@ from draupnir.structures.complex_containers import (
     Group,
     Superarray,
 )
-from draupnir.structures.fields import (
-    Atom,
-    Element,
-    Enum,
-    FieldRef,
-    Pattern,
-    Union_,
-)
 from draupnir.structures.simple_containers import (
+    FieldItemRef,
     Simplearray,
-    Tuple_,
+    VerdandiField,
 )
 
 
@@ -62,7 +55,7 @@ ShallowContainerRef = Annotated[
 ]
 
 ShallowFieldConditionalRef = Annotated[
-    Pattern | Atom | Enum | Element | Union_ | Tuple_,
+    VerdandiField,
     BeforeValidator(ref_from_cache),
 ]
 
@@ -117,8 +110,8 @@ class Shallowsection(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     description: str
-    required: dict[str, FieldRef] | None = None
-    optional: dict[str, FieldRef] | None = None
+    required: dict[str, FieldItemRef] | None = None
+    optional: dict[str, FieldItemRef] | None = None
     conditional: dict[str, ShallowFieldConditionalEntry] | None = None
     containers: ShallowContainers | None = None
 

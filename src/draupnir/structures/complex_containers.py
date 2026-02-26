@@ -7,8 +7,8 @@ per-context conditional entries. Superarray holds groups or simplegroups
 
 Ref type aliases defined here:
   SimplegroupRef — single simplegroup ref (for array items, oneOf members)
-  GroupContainerRef — tuple | simplearray | simplegroup | array (group containers)
-  GroupFieldConditionalRef — field-level + tuple (group field conditionals)
+  GroupContainerRef — simplearray | simplegroup | array (group containers)
+  GroupFieldConditionalRef — VerdandiField only (group field conditionals)
   GroupOrSimplegroupRef — group | simplegroup (for superarray items)
 """
 
@@ -18,18 +18,11 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_valida
 
 from draupnir.functions.pure.pydantic_validators import ref_from_cache
 from draupnir.structures.conditionals import ConditionalWhen
-from draupnir.structures.fields import (
-    Atom,
-    Element,
-    Enum,
-    FieldRef,
-    Pattern,
-    Union_,
-)
 from draupnir.structures.simple_containers import (
+    FieldItemRef,
     Simplearray,
     Simplegroup,
-    Tuple_,
+    VerdandiField,
 )
 
 
@@ -64,12 +57,12 @@ class Array(BaseModel):
 # --- Group models ---
 
 GroupContainerRef = Annotated[
-    Tuple_ | Simplearray | Simplegroup | Array,
+    Simplearray | Simplegroup | Array,
     BeforeValidator(ref_from_cache),
 ]
 
 GroupFieldConditionalRef = Annotated[
-    Pattern | Atom | Enum | Element | Union_ | Tuple_,
+    VerdandiField,
     BeforeValidator(ref_from_cache),
 ]
 
@@ -125,8 +118,8 @@ class GroupFields(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    required: dict[str, FieldRef] | None = None
-    optional: dict[str, FieldRef] | None = None
+    required: dict[str, FieldItemRef] | None = None
+    optional: dict[str, FieldItemRef] | None = None
     conditional: dict[str, GroupFieldConditionalEntry] | None = None
 
 

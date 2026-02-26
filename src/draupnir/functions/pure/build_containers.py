@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from draupnir.functions.pure.build_fields import (
     build_conditional_entry,
     build_field,
+    build_verdandi_field,
 )
 from draupnir.structures.complex_containers import (
     Array,
@@ -34,6 +35,7 @@ from draupnir.structures.simple_containers import (
     Simplearray,
     Simplegroup,
     Tuple_,
+    VerdandiField,
 )
 from draupnir.structures.top_level import (
     Section,
@@ -161,6 +163,8 @@ def build_model(
         return build_section(model, reverse, shared, defs)
     if isinstance(model, Shallowsection):
         return build_shallowsection(model, reverse, shared, defs)
+    if isinstance(model, VerdandiField):
+        return build_verdandi_field(model)
     return build_field(model)
 
 

@@ -15,7 +15,7 @@ from draupnir.structures.complex_containers import (
     Group,
     Superarray,
 )
-from draupnir.structures.field import VerdandiField
+from draupnir.structures.simple_containers import VerdandiField
 from draupnir.structures.fields import (
     Atom,
     Element,

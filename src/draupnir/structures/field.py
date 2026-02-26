@@ -1,23 +1,14 @@
-"""Field-level Verdandi model: the semantic membrane between types and containers.
+"""Field extension models: SemanticBlock, ConstraintRule.
 
-A Field wraps a type-tier reference (atom, enum, element, union, tuple) with
-a human-readable description and optional semantic/constraint extension blocks.
-Fields sit between the type tier and the container tier in load order.
+These are the sub-models carried by VerdandiField for optional semantic
+and constraint metadata. Defined separately to break the circular import
+between field-level and simple-container modules (VerdandiField needs
+Tuple_ from simple_containers, and simple_containers needs VerdandiField
+in its ref aliases — so VerdandiField lives in simple_containers.py
+while these support models live here).
 """
 
-from typing import Annotated
-
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field as PydanticField
-
-from draupnir.functions.pure.pydantic_validators import ref_from_cache
-from draupnir.structures.fields import Atom, Element, Enum, Union_
-from draupnir.structures.simple_containers import Tuple_
-
-
-FieldTypeRef = Annotated[
-    Atom | Enum | Element | Union_ | Tuple_,
-    BeforeValidator(ref_from_cache),
-]
+from pydantic import BaseModel, ConfigDict, Field as PydanticField
 
 
 class SemanticBlock(BaseModel):
@@ -42,14 +33,3 @@ class ConstraintRule(BaseModel):
     field: str | None = None
     order: str | None = None
     values: tuple[str, ...] | None = PydanticField(default=None, alias="in")
-
-
-class VerdandiField(BaseModel):
-    """Semantic membrane: type reference + description + extensions."""
-
-    model_config = ConfigDict(frozen=True)
-
-    type: FieldTypeRef
-    description: str
-    semantic: SemanticBlock | None = None
-    constraint: tuple[ConstraintRule, ...] | None = None

@@ -12,7 +12,11 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from draupnir.functions.impure.loader import load_all_levels
-from draupnir.functions.impure.writer import serialize_schema, write_schema
+from draupnir.functions.impure.writer import (
+    serialize_schema,
+    write_schema,
+    write_sidecar,
+)
 from draupnir.functions.pure.exporter import export_all_schemas
 
 
@@ -35,14 +39,16 @@ def schema_filename(schema_key: str) -> str:
 def run_all(
     verdandi_root: Path,
     output_dir: Path,
+    workspace_root: Path,
 ) -> int:
-    """Load everything, export all schemas, write all files."""
+    """Load everything, export all schemas, write all files + sidecars."""
     cache: dict[str, BaseModel] = {}
     load_all_levels(verdandi_root, cache)
     schemas = export_all_schemas(cache)
     for key, document in schemas.items():
         out = output_dir / schema_filename(key)
         write_schema(document, out)
+        write_sidecar(out, workspace_root)
         sys.stdout.write(f"wrote {out.name}\n")
     return 0
 

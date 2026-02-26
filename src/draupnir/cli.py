@@ -85,7 +85,7 @@ def main() -> int:
         return run_check(verdandi, output)
     if args.list:
         return run_list(verdandi)
-    return run_all(verdandi, output)
+    return run_all(verdandi, output, workspace)
 
 
 if __name__ == "__main__":

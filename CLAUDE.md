@@ -2,231 +2,367 @@
 
 ## STOP. Read this before writing any code.
 
-You are building a schema generator. You have a plan file. You probably feel like you understand the design well enough to start coding. **You are almost certainly wrong.**
+You are rebuilding a schema generator. You have a design document. You probably feel like you understand the architecture well enough to start coding. **You are almost certainly wrong.**
 
-After compaction, you have a summary of the design — not the design itself. Summaries preserve conclusions but lose the reasoning, the constraints, the specific shapes. You will produce code that looks right, compiles, and silently violates the architecture because the summary told you WHAT but not HOW or WHY NOT.
+After compaction, you have a summary — not understanding. The summary preserves conclusions but loses reasoning, constraints, and the specific shapes of things. You will produce output that looks right, compiles, and silently violates the architecture because the summary told you WHAT but not HOW or WHY NOT.
 
-**This has happened before.** Previous LLM sessions in this workspace have:
+**This has happened before.** Previous LLM sessions in this project have:
 - Implemented structured fields as `type: string` (silently dropping architecture)
 - Flattened 8-level composition hierarchies because they "seemed redundant"
-- Globbed entire directories when the design requires walking from root
+- Globbed entire directories when the design requires level-ordered loading
 - Put IO in pure functions because "it's just one file read"
 - Built 50+ line monolith functions while claiming to follow Gleipnir rules
 - Returned `dict[str, Any]` from builders because "it's JSON Schema, dicts are natural"
 - Created an `unsafe/` directory for loaders that didn't need `Any` types at all
-- Used `load_fn: Callable` without typed returns, tainting pure code with untyped data
+- Created a "resolve" function when there is no resolution step — loading IS the pipeline
+- Used AfterValidator on strings when the architecture requires BeforeValidator that converts strings to cached models
+- Built demand-driven recursive loaders when the architecture specifies supply-driven level-ordered loading
+
+- Written a function that returns `dict` to "pass through" YAML data, then tried to fix the type annotation instead of questioning the approach
+- Called Gleipnir a "linter" while trying to make guardrail violations pass — the ultimate sign of lost architecture
 
 None of them felt uncertain while doing it.
 
----
-
-## The Plan File
-
-**Location:** `~/.claude/plans/warm-gliding-kitten.md`
-
-This is your source of truth for the build. Read it. Not skim it — read it. The plan contains:
-- Architecture (the Phoenix pattern from `phoenix/cli/`)
-- Design principles (7 non-negotiable rules)
-- Structures progression (Raw → Walked → Resolved → Schema output — 4 stages, all typed)
-- The walk algorithm (how the tree is traversed)
-- YAML changes required (what gets modified in Phase 5)
-- Build order (6 phases with dependencies)
-- References per phase (what to re-read before starting each phase)
-
-**Before starting ANY phase**, re-read that phase's section in the plan file. Check the references listed there.
+**The test:** Can you state three specific constraints of this project that diverge from how you'd normally write this code? Not "I should be careful" — actual constraints, with reasons. If you can't, you don't have enough context to write code. Read the recovery sources below before proceeding.
 
 ---
+<!-- EVERYTHING ABOVE THIS LINE IS STANDARDIZED (except the failure examples) -->
+<!-- EVERYTHING BELOW THIS LINE IS PROJECT-SPECIFIC                           -->
+---
 
-## Design Decisions You Will Violate
+## You Will Get These Things Wrong
 
-These are the decisions most likely to be lost after compaction. If you can't explain WHY each one matters, re-read the plan.
+### Creating a "resolve" function
+**Detection:** If you find yourself writing `def resolve(`, `resolve_walked_`, `ResolvedNode`...
+**Why it's wrong:** There is no resolution step. Loading IS the pipeline. Pydantic `BeforeValidator` converts string refs to cached models during `model_validate()`. Every model is in FINAL FORM from the moment it's validated.
+**Recovery:** Re-read DRAUPNIR_REDESIGN.md §7 "There is no resolution. There is only loading."
 
-### 1. Walk from root, not glob
+### Creating "Raw" and "Resolved" model pairs
+**Detection:** If you find yourself writing `RawPattern`, `RawAtom`, `ResolvedPattern`, `ResolvedAtom`...
+**Why it's wrong:** One model per level. No "Raw" prefix. No "Resolved" prefix. A Pattern is a Pattern. An Atom is an Atom that HOLDS a Pattern (the actual frozen model, not a string). There are no intermediate states.
+**Recovery:** Re-read DRAUPNIR_REDESIGN.md §7 "Model definitions"
 
-The current `agent_schema.py` globs all YAML files into flat namespace maps. This creates collision risk between stage variants (e.g., `security.yaml` vs `security_resolved.yaml` both having fields called `security_paths`).
+### Putting IO outside the loader
+**Detection:** If you find yourself writing `Path.read_text()`, `open()`, `yaml.safe_load()` anywhere except `functions/impure/loader.py`...
+**Why it's wrong:** IO lives in exactly two places: `loader.py` (reads) and `writer.py` (writes). The builder is PURE. It receives a cache of frozen models and returns SchemaDocuments. No file access.
+**Recovery:** Re-read DRAUPNIR_REDESIGN.md §7 "Two-phase pipeline"
 
-**Draupnir walks from the schema YAML outward.** The schema references sections. Sections reference groups/arrays. Groups reference composed fields. Composed fields reference primitives by name. Only load what the tree actually references.
+### Using AfterValidator for ref types
+**Detection:** If you find yourself writing `AfterValidator` on ref fields...
+**Why it's wrong:** `BeforeValidator` fires FIRST, converting the YAML string `"atom/kebab_string"` to the actual cached `Atom` model. THEN the union type check fires, confirming the model is the right tier. AfterValidator would try to validate a string against a union of model types — wrong order.
+**Recovery:** Re-read DRAUPNIR_REDESIGN.md §7 "Typed ref annotations — hierarchy + conversion combined"
 
-If you find yourself writing `Path.glob("**/*.yaml")` or building a flat dict of all files — **STOP**. Re-read the plan's "Walk Algorithm" section.
+### Building demand-driven recursive loading
+**Detection:** If you find yourself writing recursive `load()` calls inside validators, or `info.context["load"](v)` in BeforeValidator...
+**Why it's wrong:** The architecture is SUPPLY-DRIVEN. Glob each level directory in LEVEL_ORDER. When a BeforeValidator fires, the referenced model is GUARANTEED to already be in cache (lower levels loaded first). If it's not in cache, that's a hard error (missing file), not a trigger for recursive loading.
+**Recovery:** Re-read DRAUPNIR_REDESIGN.md §7 "Load strategy: supply-driven, full tree"
 
-### 2. Two reference models
+### Reaching for `dict` (CANARY — you may need a context refresh)
+**Detection:** If you find yourself writing `dict[str, ...]`, passing dicts between functions, building dicts from YAML data, or using dict as an intermediate representation...
+**Why it's wrong:** This system passes TYPED PYDANTIC MODELS everywhere. YAML validates straight into models. Models hold models. The builder receives models and returns models. `model_dump()` happens ONCE, at the writer boundary. If you're reaching for dict, you've lost the architecture — you're probably thinking in generic Python instead of this system's model-holds-model design.
+**Recovery:** STOP. This is a canary. Re-read DRAUPNIR_REDESIGN.md §7 and this CLAUDE.md's architecture paragraph. The answer is almost never dict — it's a typed model or a typed model field.
 
-There are exactly TWO ways things reference each other:
+### Treating YAML data as "arbitrary" or "dynamic"
+**Detection:** If you find yourself writing "arbitrary YAML dict", "dynamic structure", "unknown shape", or handling YAML data as untyped...
+**Why it's wrong:** Every YAML shape in Verdandi is KNOWN. There are exactly 14 level formats, each with a known structure. The `{oneOf: [...]}` dict is not "arbitrary" — it's a specific, known shape with a model (`ArrayOneOf`, `SuperarrayOneOf`). If you think a YAML value is untyped, you haven't read the YAML files for that level.
+**Recovery:** Read the actual YAML files in `tools/verdandi/<level>/`. Identify the shape. Create or find the model for it. Use Pydantic's union matching if a field accepts multiple known shapes.
 
-- **File-based structural references** — Used at ALL levels above primitives. The key is the JSON field name, the value is a relative file path. Example: `security_paths: groups/security_paths_resolved.yaml`
-- **Name-based type adoption** — Used ONLY for primitives. A composed field's `type:` names a primitive. Example: `type: path_allowed_absolute`
+### Adding methods to models
+**Detection:** If you find yourself adding `def`, `@property`, `@model_validator` that contains logic, classmethod factories...
+**Why it's wrong:** Models in `structures/` are frozen data containers. Zero methods. Validators that enforce structural invariants (like "at least one of required/optional/conditional") are the ONE exception — and even those are simple boolean checks, not logic.
+**Recovery:** Look at the models. They're `ConfigDict(frozen=True)` with typed fields. That's it.
 
-If you find yourself using name-based lookups for anything other than primitives — **STOP**. Re-read the plan's "Two Reference Models" section.
+### Writing functions > 50 lines
+**Detection:** If you're at line 40 and still going...
+**Why it's wrong:** Gleipnir enforces this structurally. But more importantly: a function over 50 lines is doing more than one thing. Decompose NOW, not later. "I'll clean this up later" means it ships broken.
+**Recovery:** Split the function. Each piece does one thing.
 
-### 3. Stable field names
+### Using `Any` anywhere
+**Detection:** If you find yourself writing `: Any`, `dict[str, Any]`, `-> Any`...
+**Why it's wrong:** Every value in this system has a known type. The YAML shapes are known. The models are typed. The output is typed. If you think you need `Any`, you haven't understood the data at that point.
+**Recovery:** Trace the data. What type is it ACTUALLY? Create a model for it.
 
-The `name:` field in every YAML file = the JSON field name in the output schema. It NEVER changes per pipeline stage. The YAML **filename** carries the variant (`context_path.yaml` vs `context_path_resolved.yaml`), but both have `name: context_path`.
+### Re-exporting from `__init__.py`
+**Detection:** If you find yourself writing `from .fields import Pattern, Atom` in `__init__.py`...
+**Why it's wrong:** `__init__.py` files are ALWAYS EMPTY. Direct imports only: `from draupnir.structures.fields import Pattern`.
+**Recovery:** Delete the re-export. Fix the import at the call site.
 
-This is the entire reason Draupnir exists. The old generator forced field name changes per stage. If you find yourself changing `name:` values between stages — **STOP**. You are recreating the exact problem this rebuild fixes.
+### Calling the structures directory "models"
+**Detection:** If you create `src/draupnir/models/`...
+**Why it's wrong:** The convention is `structures/`. Models is the Pydantic term. Structures is our term. The directory has always been called structures.
+**Recovery:** Rename to `structures/`.
 
-### 4. structures.py has ZERO logic
+### Using leading underscore names
+**Detection:** If you find yourself writing `def _validate_ref(`, `def _build_properties(`, `_helper_function`...
+**Why it's wrong:** No leading underscore names. Period. The "private" convention is an OOP pattern for hiding implementation behind interfaces. In FP, every function is a composable public unit. If a function does one thing and is pure, there's no reason to hide it.
+**Recovery:** Remove the underscore. If the name collides, choose a better name.
 
-Frozen Pydantic models only. No methods. No `@property`. No `def resolve()`. No `def to_dict()`. No classmethod factories. Just fields with types and `model_config = ConfigDict(frozen=True)`.
+---
 
-**Reference:** `phoenix/cli/space_schema_gen/structures.py` — look at it. It's models and nothing else.
+## MANDATORY: Run Guardrails Frequently
 
-If you find yourself adding a method to a structure — **STOP**. That logic belongs in a function in `functions/pure/`.
+```
+uv run pytest tests/test_guardrails.py
+```
 
-### 5. Pure functions are actually pure
+**Run this after EVERY significant change.** Not after finishing a phase. Not at the end
+of the session. After every file you write. After every function you complete. After every
+edit that touches more than a few lines.
 
-Functions in `functions/pure/` take data and return data. They do not:
-- Read files (`Path.read_text()`, `open()`, `yaml.safe_load()`)
-- Write files
-- Print anything
-- Access environment variables
-- Mutate their arguments
+**Why frequency matters:** Architectural debt compounds silently. If you write 3 files
+without running guardrails, you may have 15 violations that share a common root cause.
+At 3 files, that's fixable. At 6 files, it's painful. At 10 files, you can't refactor
+out of it — the architectural debt is load-bearing and the only option is fail-abort-rebuild.
 
-If a pure function needs data from a file, the CALLER reads the file and passes the data in.
+**The failure mode:** "I'll run guardrails after I finish this phase." By then, the
+violations are entangled with each other. Fixing one creates two more. This is the
+whack-a-mole death spiral.
 
-The walkers use `SchemaLoaders` — a frozen Pydantic model containing typed callable loaders. The walker logic is deterministic; the IO is injected via the loader callables constructed at the impure boundary.
+**The discipline:** Run early, run often. Green after every change. A violation after
+one file is a 2-minute fix. A violation cluster after 6 files is a session-ending rebuild.
+
+### Gleipnir as Diagnostic: Redirect vs Blocker
+
+**When you are oriented**, a guardrail violation is a simple redirect. You see the
+violation, understand what it means architecturally, adjust your approach, and
+continue. This takes 30 seconds. Example: "bare dict in type annotation" → "oh, I
+shouldn't be passing dict here — every YAML shape is a known model."
+
+**When you have lost the architecture**, a guardrail violation becomes a blocker.
+You see the violation and start trying to make it pass — changing type annotations,
+trying workarounds, escalating through increasingly clever typing tricks. Each
+attempt hits another guardrail. You call Gleipnir a "linter." You are now writing
+code to satisfy the checker, not the architecture.
+
+**The test:** When you hit a guardrail violation, do you immediately see the
+architectural fix? If yes, you're oriented — fix and continue. If you're reaching
+for workarounds, STOP. You have lost the architecture. Re-read this CLAUDE.md and
+the design doc before writing another line of code.
+
+**This has happened.** A session hit `no_bare_collections` on a function returning
+`dict`. Instead of asking "why does my design have dict?", the session tried
+`dict[str, object]`, then `dict[str, Any]`, then considered other typing tricks.
+Each step moved further from the architecture. The user had to intervene. The
+correct response was: "every YAML shape is known — the `{oneOf: [...]}` structure
+is a model called `ArrayOneOf`, and Pydantic's union matching handles it without
+any dict."
+
+---
+
+## Context Reminders for Long Sessions
+
+This will be a long coding session with frequent compaction. After each compaction, you will lose the reasoning behind decisions. These reminders tell you WHERE YOU ARE and WHAT NOT TO DEVIATE FROM.
+
+### After ANY compaction, ask yourself:
+
+1. **What phase am I in?** Check the gated plan (DRAUPNIR_REDESIGN.md §11). Find the last completed gate. That's where you are.
+
+2. **Am I about to create a resolve function?** There is no resolution. Loading IS the pipeline. If you're writing `resolve_`, STOP.
+
+3. **Am I about to create Raw/Resolved model pairs?** One model per level. Final form from validation. No intermediate states.
+
+4. **Am I importing from draupnir_old?** Never. It's reference-only. Read it, don't import it.
+
+5. **Am I loading on demand?** No. Supply-driven. Glob levels in order. Cache is pre-filled.
+
+6. **Are my functions under 50 lines?** Run `uv run pytest tests/test_guardrails.py` NOW.
+
+7. **Is IO only in loader.py and writer.py?** If `Path` or `open()` appears anywhere else, STOP.
+
+8. **Have I run guardrails recently?** `uv run pytest tests/test_guardrails.py` — if you haven't run it in the last 2-3 changes, run it NOW. Architectural debt compounds faster than you think.
+
+9. **Am I using leading underscores?** No `_private` functions. Every function is a public composable unit.
+
+10. **Am I reaching for `dict`?** This is a CANARY. We pass typed Pydantic models everywhere. YAML validates straight into models. If you want dict, you've lost the architecture. Re-read §7 and the architecture paragraph below.
+
+11. **Is Gleipnir a redirect or a blocker right now?** If a guardrail violation is a simple "oh, do X instead" → you're oriented. If you're trying workarounds to make it pass → STOP. You've lost the architecture. Re-read this file. Every YAML shape is known. Every known shape has a model. There are no arbitrary dicts.
+
+### The architecture in one paragraph:
+
+Draupnir reads Verdandi YAML files from `tools/verdandi/`. It globs each level directory in order (pattern → enum → atom → element → union → ... → schema). Each YAML is validated through a level-specific Pydantic model. BeforeValidators on ref fields convert string references to actual cached models. After loading completes, the cache holds every file as a frozen Pydantic model — models that HOLD their children as actual models, not strings. The builder walks this tree of models, identifies shared nodes for $defs, and produces SchemaDocuments. The writer serializes them to JSON. Two impure boundaries (loader reads, writer writes). Everything between is pure.
+
+---
+
+## Functional Programming Discipline
+
+These principles are not optional style preferences. They are the architectural
+response to structural problems in LLM-generated code. Following them is how you
+automatically pass Gleipnir. Fighting them is how you produce confident, plausible,
+structurally wrong output.
+
+### Hemingway Coding: Each function does ONE thing
+
+"What is the ONE thing this function does?" If you can't answer in one sentence,
+you're not ready to write it. 16 lines of functional code replaced 10+ files of
+scattered datetime logic. Not through clever compression — through eliminating waste.
+
+**The question:** What is the functional primitive here?
+**The process:** SLOW DOWN → scan for patterns → identify actual needs → question
+assumptions → design minimal → let composition emerge.
+
+**Reference:** `phoenix/coding_reference/AI_BREAKTHROUGHS_HEMINGWAY_CODING.md`
+
+### IO Externalization: The two-boundary architecture
+
+90%+ of errors cluster at IO boundaries. Draupnir has exactly TWO impure files:
+`loader.py` (reads YAML) and `writer.py` (writes JSON). Everything between is pure
+computation on frozen models.
+
+If you put `Path.read_text()` in the builder, you've punched a hole in the wall.
+The builder receives a cache of frozen models. It cannot and should not access files.
+The error field for draupnir is ONLY those two impure files — the rest is provably
+safe given valid inputs.
 
 **Reference:** `phoenix/coding_reference/AI_BREAKTHROUGHS_IO_EXTERNALIZATION.md`
 
-### 6. Type safety all the way through — model_dump() only at the writer boundary
+### Safety Taxonomy: Import path IS the safety contract
 
-**This is the most important architectural discovery from Phase 3.**
-
-Every stage of the pipeline passes typed Pydantic models:
-- Loaders return `RawPrimitive`, `RawComposed`, `RawGroup`, etc. (not `dict`)
-- Walkers return `WalkedSchema` containing `WalkedSection`, `WalkedGroup`, etc.
-- Resolvers return `ResolvedSchema` containing `ResolvedSection`, `ResolvedGroup`, etc.
-- Builders return `SchemaDocument` containing `SchemaObject`, `SchemaField`, etc.
-- **Only the writer** calls `model_dump(by_alias=True, exclude_none=True)` to serialize to JSON
-
-There are ZERO untyped dicts in the pipeline. No `dict[str, Any]`. No `JsonDict`. No "we'll serialize later." Every intermediate value has a frozen Pydantic model with named, typed fields.
-
-If you find yourself returning a `dict` from any function — **STOP**. Create a typed Pydantic model in `structures.py` instead.
-
-### 7. IO in exactly two places
-
-- `functions/impure/loaders.py` — reads YAML files, validates into typed Pydantic models
-- `functions/impure/writers.py` — serializes SchemaDocument via model_dump(), writes JSON files
-
-That's it. No `unsafe/` directory — there is no untyped data in this system. The YAML structure is known at every call site. Pydantic validates immediately at the boundary. `Any` is never needed.
-
-If you're about to put `Path` or `open()` anywhere else — **STOP**.
-
----
-
-## The SchemaLoaders Pattern
-
-The walker needs to load files (IO) but must remain pure (no IO). This is solved by dependency inversion:
-
-```python
-# In structures.py — the interface
-class SchemaLoaders(BaseModel):
-    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
-    composed: Callable[[PurePosixPath], RawComposed]
-    group: Callable[[PurePosixPath], RawGroup]
-    array: Callable[[PurePosixPath], RawArray]
-    section: Callable[[PurePosixPath], RawSection]
-
-# In functions/impure/loaders.py — the implementation
-def make_schema_loaders(root: Path) -> SchemaLoaders:
-    return SchemaLoaders(
-        composed=lambda p: load_composed(root / p),
-        group=lambda p: load_group(root / p),
-        array=lambda p: load_array(root / p),
-        section=lambda p: load_section(root / p),
-    )
-
-# In functions/pure/walkers.py — the consumer
-def walk_group(raw_group: RawGroup, root: PurePosixPath, loaders: SchemaLoaders) -> WalkedGroup:
-    # Uses loaders.composed(path), loaders.group(path), etc.
-    # Pure: given same loaders, always produces same output
+```
+functions/pure/builder.py   → pure computation, no side effects, assumes valid inputs
+functions/impure/loader.py  → has side effects (reads files), assumes valid inputs
+functions/impure/writer.py  → has side effects (writes files), assumes valid inputs
 ```
 
-Pure code defines the interface (SchemaLoaders). Impure code implements it (make_schema_loaders). The walker receives it as a parameter. No imports cross the boundary.
+The directory structure encodes the safety contract. A function in `pure/` that reads
+a file is in the wrong location — that's an architectural problem, not a naming problem.
+
+**Reference:** `phoenix/coding_reference/AI_BREAKTHROUGHS_SAFETY_TAXONOMY.md`
+
+### Errors Are Signal: Error clusters point to architectural problems
+
+When guardrails report 5 functions over 50 lines in builder.py, the problem is NOT
+those 5 functions. The problem is the builder architecture. Error clusters are a MAP:
+
+- **Type clusters** → WHAT is wrong (scattered Any = boundary discipline broke)
+- **Location clusters** → WHERE to fix (all in pipeline.py = pipeline architecture wrong)
+- **Combined** → the optimization opportunity
+
+**NEVER silence errors** (type: ignore, quarantine expansion, "various other violations").
+Silencing destroys the map.
+
+**Reference:** `phoenix/coding_reference/AI_BREAKTHROUGHS_ERRORS_ARE_SIGNAL.md`
+
+### Context Exhaustion: The failure mode you're entering right now
+
+As this session progresses, you will shift from thinking to pattern matching. The
+warning signs are specific:
+
+- **Dismissiveness:** "These are style rules, not broken functionality"
+- **Punting:** "Want me to address any specific ones?"
+- **Oscillating:** First dismissing, then frantically doing everything
+- **Rationalizing:** Finding reasons why rules don't apply here
+
+**Pattern matching feels efficient. You're completing tasks. You feel confident.
+That confidence is the symptom, not the cause.** The cause is context exhaustion.
+
+When you notice these signs: STOP. Don't overcorrect. End the session or re-read
+this CLAUDE.md.
+
+**Reference:** `phoenix/coding_reference/AI_BREAKTHROUGHS_CONTEXT_EXHAUSTION.md`
+
+### Refactoring Discipline: STOP before fixing
+
+When you see error lists: **DO NOT start fixing.** Read ALL errors. Find the PATTERN.
+Identify the functional primitive. Secure the boundary. Errors disappear naturally.
+
+Whack-a-mole (fix A → creates B → fix B → breaks A) means you're treating symptoms.
+If the code gets worse, throw out changes and start over with architecture.
+
+**Reference:** `phoenix/coding_reference/AI_BREAKTHROUGHS_REFACTORING_DISCIPLINE.md`
+
+### Naming Is Instruction: Names overpower instructions 200:1
+
+Names are encountered hundreds of times per session. Instructions are read once.
+Your training data is full of `utils.py`, `helpers.py`, `misc/` — those names are
+traps for the next session.
+
+Every name you choose teaches the next LLM what this system IS. `structures/` teaches
+"data containers." `functions/pure/` teaches "safe computation." `loader.py` teaches
+"this reads files." Name for the naive future reader, not for your current informed self.
+
+**Reference:** `phoenix/coding_reference/AI_BREAKTHROUGHS_NAMING_IS_INSTRUCTION.md`
+
+### The Economic Model: Gleipnir makes bad patterns expensive
+
+Gleipnir is NOT a quality certification system. Passing means "hasn't triggered
+failure detectors yet." Failing means "violation detected — investigate."
+
+The economics: functional patterns pass freely (cheap). OOP/monolith patterns fail
+repeatedly (expensive). Over time, the only winning move is to actually write good
+functional code. You can't game tight constraints with OOP — god classes, deep
+inheritance, massive constructors all violate multiple constraints simultaneously.
+
+**If you're fighting guardrails, you have an architectural problem.**
+
+**Reference:** `phoenix/coding_reference/AI_BREAKTHROUGHS_ECONOMIC_MODEL.md`
 
 ---
 
-## Gleipnir Constraints
+## Gleipnir
 
-These are enforced, not advisory:
-- **Max 50 lines per function** — If you're at 40 and still going, decompose NOW
-- **Max 5 parameters** — If you need 6, you need a structure
-- **Max 4 nesting depth** — If you're inside `if` inside `for` inside `if` inside `for`, extract
-- **Max 4 quarantined files** — IO-touching files are limited
+**MANDATORY:** Run `uv run pytest tests/test_guardrails.py` FREQUENTLY during development.
 
-**Reference:** `.gleipnir/rules.toml` in this project
+Key constraints (enforced, not advisory):
+- **Max 50 lines per function** — decompose if approaching
+- **Max 5 parameters** — create a structure if you need 6
+- **Max 4 nesting depth** — extract inner logic
+- **Max quarantined files** — IO-touching files are limited
 
----
-
-## How to Actually Read (Not Perform Reading)
-
-When you re-read a source document:
-
-1. **Look for contradictions.** Find something that doesn't match what you're about to build. If everything matches, you're skimming.
-2. **Look for specifics you can't recall.** Field types. Required vs optional. Which reference model is used where. If you remember everything, you're pattern-matching from the summary, not reading.
-3. **State what you recovered.** Don't say "now I understand." Say: "The walker receives SchemaLoaders — a frozen Pydantic model with typed callables. Groups use file-based field references, not name-based. Arrays reference groups for their items via file path. Builders return SchemaDocument, not dicts."
-
-Specifics prove understanding. "I understand" proves nothing.
+**Reference:** `.gleipnir/rules.toml`
 
 ---
 
-## Source Documents to Re-Read When Uncertain
+## Recovery Sources
 
 ### Architecture & Design
 | Document | Path | What it tells you |
-|---|---|---|
-| **The Plan** | `~/.claude/plans/warm-gliding-kitten.md` | Everything — architecture, structures, walk algorithm, build order |
-| **SCHEMA_COMPOSITION_EXPLAINED** | `documentation/toolcompose/SCHEMA_COMPOSITION_EXPLAINED_BY_LLM_FOR_LLM.md` | The 8-level hierarchy, why each level exists |
-| **DEFINITION_FORMAT** | `documentation/pipeline/DEFINITION_FORMAT.md` | Full field tree with type annotations |
-| **CRITICAL_DECISIONS** | `documentation/pipeline/CRITICAL_DECISIONS.md` | Decisions D1-D10, rationale |
+|----------|------|-------------------|
+| **Design Doc** | `tools/draupnir/DRAUPNIR_REDESIGN.md` | EVERYTHING — models, loading, export, pipeline, $defs, gated plan, anti-patterns |
+| **Gated Plan** | `DRAUPNIR_REDESIGN.md` §11 | 9 phases with gate checklists — what to build, what to verify |
+| **Anti-Pattern Watchlist** | `DRAUPNIR_REDESIGN.md` §12 | 12 temptation → correction mappings |
+
+### Composition Hierarchy (what draupnir consumes)
+| Document | Path | What it tells you |
+|----------|------|-------------------|
+| **Verdandi YAML files** | `tools/verdandi/` | The actual YAML being consumed — 14 level dirs, 178 files |
+| **Migration Checklist** | `tools/verdandi/MIGRATION_CHECKLIST.md` | What Verdandi files exist and their status |
+| **COMPOSITION_RULES** | `tools/verdandi/COMPOSITION_RULES.md` | Hierarchy enforcement rules, tier containment |
 
 ### Functional Programming Discipline
 | Document | Path | What it tells you |
-|---|---|---|
-| **Hemingway Coding** | `phoenix/coding_reference/AI_BREAKTHROUGHS_HEMINGWAY_CODING.md` | Each function does ONE thing |
-| **IO Externalization** | `phoenix/coding_reference/AI_BREAKTHROUGHS_IO_EXTERNALIZATION.md` | Why IO lives at the boundary |
-| **Safety Taxonomy** | `phoenix/coding_reference/AI_BREAKTHROUGHS_SAFETY_TAXONOMY.md` | pure/impure classification |
-| **Economic Model** | `phoenix/coding_reference/AI_BREAKTHROUGHS_ECONOMIC_MODEL.md` | Why constraints improve output |
-| **Context Exhaustion** | `phoenix/coding_reference/AI_BREAKTHROUGHS_CONTEXT_EXHAUSTION.md` | The pattern-matching failure mode you're in right now |
+|----------|------|-------------------|
+| **Hemingway Coding** | `phoenix/coding_reference/AI_BREAKTHROUGHS_HEMINGWAY_CODING.md` | Each function does ONE thing — the functional primitive |
+| **IO Externalization** | `phoenix/coding_reference/AI_BREAKTHROUGHS_IO_EXTERNALIZATION.md` | 90%+ of errors at IO boundaries — externalize, don't secure |
+| **Safety Taxonomy** | `phoenix/coding_reference/AI_BREAKTHROUGHS_SAFETY_TAXONOMY.md` | Import path IS the safety contract — pure/impure/unsafe |
+| **Context Exhaustion** | `phoenix/coding_reference/AI_BREAKTHROUGHS_CONTEXT_EXHAUSTION.md` | Overconfidence + pattern matching = catastrophic errors |
+| **Errors Are Signal** | `phoenix/coding_reference/AI_BREAKTHROUGHS_ERRORS_ARE_SIGNAL.md` | Error clusters are maps — silencing destroys the map |
+| **Economic Model** | `phoenix/coding_reference/AI_BREAKTHROUGHS_ECONOMIC_MODEL.md` | Gleipnir makes bad patterns expensive, good patterns free |
+| **Refactoring Discipline** | `phoenix/coding_reference/AI_BREAKTHROUGHS_REFACTORING_DISCIPLINE.md` | STOP before fixing — find the pattern, secure the boundary |
+| **Naming Is Instruction** | `phoenix/coding_reference/AI_BREAKTHROUGHS_NAMING_IS_INSTRUCTION.md` | Names overpower instructions 200:1 — name for naive readers |
+| **Mental Map Architecture** | `phoenix/coding_reference/AI_BREAKTHROUGHS_MENTAL_MAP_ARCHITECTURE.md` | Codebase is spatial graph — FP creates simple graphs |
+| **Boundary Security** | `phoenix/coding_reference/AI_BREAKTHROUGHS_BOUNDARY_SECURITY.md` | Visualize error field — can you imagine all failure modes? |
+| **Sandbox Model** | `phoenix/coding_reference/AI_BREAKTHROUGHS_SANDBOX_MODEL.md` | "There is no door" — violations architecturally impossible |
+| **LLM Coding Quality** | `outputs/LLM_CODING_QUALITY_v2.md` | The 6 structural problems and architectural responses |
 
-### Reference Implementations
-| Directory | What to look at |
-|---|---|
-| `phoenix/cli/space_schema_gen/` | structures.py, pipeline.py, resolvers.py — the pattern to follow |
-| `phoenix/cli/doc_schema_gen/` | builders.py, composers.py — YAML to JSON Schema with inheritance |
-
-### Current System (what Draupnir replaces)
-| File | What it tells you |
-|---|---|
-| `tools/agent_schema.py` | The 1700-line monolith. Read for BEHAVIOR to replicate, not code to imitate |
-| `tools/inspect_schema.py` | The schema inspector. Should work unchanged with Draupnir output |
-
----
-
-## What Violation Looks Like
-
-Concrete anti-patterns. If you catch yourself doing any of these, STOP immediately:
-
-- **Writing a function > 50 lines** — Decompose. The function is doing more than one thing.
-- **Putting `Path.read_text()` in a resolver** — IO in pure code. The caller reads, you receive data.
-- **Using a `name:` field value as a lookup key** — Use file path references for structural composition.
-- **Globbing a directory** — Walk from root. The schema tells you what to load.
-- **Adding a method to a Pydantic model** — Logic-free structures. The method belongs in `functions/pure/`.
-- **Returning `dict` from a builder** — Create a typed Schema* model in structures.py. model_dump() happens ONCE at the writer boundary.
-- **Using `Any` anywhere** — The data is always typed. If you think you need `Any`, you haven't understood the data at that point.
-- **Creating an `unsafe/` directory** — There is no untyped data in this system. Loaders validate directly into Pydantic models.
-- **Saying "I'll clean this up later"** — No. Gleipnir constraints are enforced NOW. If it's too long, split it now.
-- **Skipping a phase's references** — Re-read before implementing. Post-compaction you is not pre-compaction you.
+### Reference (behavioral, not code to imitate)
+| Resource | What it tells you |
+|----------|-------------------|
+| `src/draupnir_old/` | Old draupnir code — read for BEHAVIOR to replicate, not code to follow |
+| `tools/agent_schema.py` | The 1700-line monolith draupnir replaces |
+| `tools/inspect_schema.py` | Schema inspector — should work unchanged with new output |
 
 ---
 
 ## Quick Orientation
 
-**What is Draupnir?** A schema generator that replaces `tools/agent_schema.py`. It walks composition trees from schema root to sections to groups to composed to primitives, producing JSON Schema.
+**What is Draupnir?** A schema generator that reads Verdandi YAML composition hierarchies and produces JSON Schema documents. Replaces `tools/agent_schema.py`.
 
-**Why rebuild?** The old generator forces field names to change per pipeline stage (namespace collision avoidance via renaming). This means every downstream consumer needs different field names per stage. Draupnir keeps field names stable — the filename carries the variant, not the name field.
+**Why rebuild?** The old draupnir consumed toolcompose YAML (7 categories). Verdandi replaces toolcompose with 14 levels in 4 tiers, path-based references, and explicit hierarchy enforcement. The architecture change is fundamental — loading IS the pipeline, models hold models, no resolution step.
 
-**What pattern does it follow?** The phoenix/cli functional architecture: frozen structures, pure functions, IO at boundaries, thin pipeline composition. Type safety maintained end-to-end with Pydantic models — serialization to dict happens once at the writer boundary.
+**What pattern does it follow?** Supply-driven loading fills a cache with frozen Pydantic models (models that hold their children as actual models, not strings). Pure builder walks the model tree to produce JSON Schema. IO at two boundaries only (loader reads, writer writes).
 
-**Where is the plan?** `~/.claude/plans/warm-gliding-kitten.md`
+**Where is the design?** `tools/draupnir/DRAUPNIR_REDESIGN.md`
 
-**What phase am I in?** Check git log for what's been committed. The plan has 6 phases (0-5) plus downstream rebuild (Phase 6).
+**What phase am I in?** Check git log for what's been committed. The gated plan (DRAUPNIR_REDESIGN.md §11) has 9 phases (0-8). Find the last completed gate.
+
+**Directory convention:** `structures/` not `models/`. `__init__.py` always empty. Direct imports only.

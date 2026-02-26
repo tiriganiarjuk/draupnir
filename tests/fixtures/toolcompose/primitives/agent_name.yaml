@@ -1,5 +1,0 @@
-name: agent_name
-type: string
-requirement: mandatory
-pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
-description: Kebab-case agent identifier.

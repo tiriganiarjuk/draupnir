@@ -1,4 +1,0 @@
-name: metadata_agent_name
-type: agent_name
-requirement: inherit
-description: The agent's unique name in metadata context.

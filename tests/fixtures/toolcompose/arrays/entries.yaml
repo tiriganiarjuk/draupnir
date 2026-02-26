@@ -1,4 +1,0 @@
-name: entries
-type: array
-items:
-  $ref: groups/entry_item.yaml

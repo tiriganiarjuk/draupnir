@@ -1,4 +1,0 @@
-name: workspace
-type: path_allowed_any
-requirement: inherit
-description: Workspace directory path.

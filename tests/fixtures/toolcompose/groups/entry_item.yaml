@@ -1,6 +1,0 @@
-name: entry_item
-type: object
-additional_properties: false
-fields:
-  metadata_agent_name: composed/metadata_agent_name.yaml
-required_fields: [metadata_agent_name]

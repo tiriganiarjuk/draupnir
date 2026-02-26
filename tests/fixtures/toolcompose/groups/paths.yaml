@@ -1,6 +1,0 @@
-name: paths
-type: object
-additional_properties: false
-fields:
-  workspace: composed/workspace.yaml
-required_fields: [workspace]

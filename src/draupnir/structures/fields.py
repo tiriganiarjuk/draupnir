@@ -1,0 +1,86 @@
+"""Field-level Verdandi models: Pattern, Atom, Enum, Element, Union_.
+
+These are the lowest composition levels. Each model is frozen and holds
+its children as actual models (not strings) via BeforeValidator conversion.
+
+Ref type aliases defined here (PatternRef, AtomOrEnumRef, UnionMemberRef,
+FieldRef) are imported by higher-level structure modules.
+"""
+
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, BeforeValidator, ConfigDict
+
+from draupnir.functions.pure.pydantic_validators import ref_from_cache
+
+
+class Pattern(BaseModel):
+    """Raw regex pattern — the lowest building block."""
+
+    model_config = ConfigDict(frozen=True)
+
+    regex: str
+    description: str
+
+
+PatternRef = Annotated[Pattern, BeforeValidator(ref_from_cache)]
+
+
+class Atom(BaseModel):
+    """Constrained base type: string, integer, or boolean."""
+
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal["string", "integer", "boolean"]
+    pattern: PatternRef | None = None
+    excludes: tuple[PatternRef, ...] | None = None
+    description: str
+
+
+class Enum(BaseModel):
+    """Enumerated allowed values."""
+
+    model_config = ConfigDict(frozen=True)
+
+    values: tuple[str | int | bool, ...]
+    description: str
+
+
+AtomOrEnumRef = Annotated[Atom | Enum, BeforeValidator(ref_from_cache)]
+
+
+class Element(BaseModel):
+    """Atom or Enum with a runtime format contract."""
+
+    model_config = ConfigDict(frozen=True)
+
+    inherits: AtomOrEnumRef
+    format: str | None = None
+    required: Literal["mandatory"] | None = None
+    description: str
+
+
+# Union members are atom/enum/element only — not patterns, not unions.
+# This narrower type breaks the circularity with FieldRef.
+UnionMemberRef = Annotated[
+    Atom | Enum | Element,
+    BeforeValidator(ref_from_cache),
+]
+
+
+class Union_(BaseModel):
+    """OneOf composition of field-level models."""
+
+    model_config = ConfigDict(frozen=True)
+
+    union: tuple[UnionMemberRef, ...]
+    description: str
+
+
+# FieldRef includes all 5 field types. Defined after Union_ to avoid
+# forward references. Used by simple_containers, complex_containers,
+# and top_level modules.
+FieldRef = Annotated[
+    Pattern | Atom | Enum | Element | Union_,
+    BeforeValidator(ref_from_cache),
+]

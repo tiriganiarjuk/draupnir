@@ -1,51 +1,74 @@
-"""CLI entry point for draupnir schema generator.
+"""Draupnir CLI — generate JSON Schema from Verdandi YAML.
 
-IMPURE: Argument parsing, process exit codes.
-Thin wrapper — parses args, dispatches to command functions.
+Default mode is --all (generate everything). Single-schema mode
+exists for debugging only.
 """
 
 import argparse
 import sys
 from pathlib import Path
 
-from draupnir.functions.impure.commands import (
-    cmd_check,
-    cmd_generate_all,
-    cmd_generate_one,
-    cmd_list,
+from draupnir.functions.impure.pipeline import (
     resolve_paths,
+    run_all,
+    run_check,
+    run_list,
 )
 
 
+def find_workspace_root() -> Path:
+    """Find the workspace root by walking up from this file's location.
+
+    Identifies the workspace root as the first ancestor containing
+    tools/verdandi/. Falls back to the draupnir tool root's grandparent.
+    """
+    start = Path(__file__).resolve().parent
+    for parent in start.parents:
+        if (parent / "tools" / "verdandi").is_dir():
+            return parent
+    return start.parents[3]
+
+
 def build_parser() -> argparse.ArgumentParser:
-    """Build the argument parser."""
+    """Build the CLI argument parser."""
     parser = argparse.ArgumentParser(
         prog="draupnir",
-        description="Generate JSON Schema from toolcompose definitions.",
+        description="Generate JSON Schema from Verdandi YAML.",
+    )
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--all",
+        action="store_true",
+        default=True,
+        help="Generate all schemas (default)",
+    )
+    group.add_argument(
+        "--check",
+        action="store_true",
+        help="Check for drift without writing",
+    )
+    group.add_argument(
+        "--list",
+        action="store_true",
+        help="List available schemas",
     )
     parser.add_argument(
-        "name", nargs="?", default=None,
-        help="Schema name to generate (e.g., agent-definition)",
+        "--verdandi-dir",
+        type=Path,
+        default=None,
+        help="Override Verdandi root directory",
     )
     parser.add_argument(
-        "--all", action="store_true", dest="generate_all",
-        help="Generate all schemas",
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="Override output directory",
     )
     parser.add_argument(
-        "--check", action="store_true",
-        help="Check for drift without writing (exit 1 if drift)",
-    )
-    parser.add_argument(
-        "--list", action="store_true", dest="list_schemas",
-        help="List available schema definitions",
-    )
-    parser.add_argument(
-        "--standards-dir", type=Path, default=None,
-        help="Override toolcompose root directory",
-    )
-    parser.add_argument(
-        "--output-dir", type=Path, default=None,
-        help="Override output directory for generated schemas",
+        "--workspace",
+        type=Path,
+        default=None,
+        help="Override workspace root",
     )
     return parser
 
@@ -54,17 +77,16 @@ def main() -> int:
     """CLI entry point."""
     parser = build_parser()
     args = parser.parse_args()
-    workspace = Path(__file__).resolve().parent.parent.parent.parent.parent
-    standards_dir, output_dir = resolve_paths(
-        args.standards_dir, args.output_dir, workspace,
+    workspace = args.workspace or find_workspace_root()
+    verdandi, output = resolve_paths(
+        args.verdandi_dir, args.output_dir, workspace,
     )
-    if args.list_schemas:
-        return cmd_list(standards_dir)
-    if args.generate_all:
-        if args.check:
-            return cmd_check(standards_dir, output_dir)
-        return cmd_generate_all(standards_dir, output_dir, workspace)
-    if args.name:
-        return cmd_generate_one(args.name, standards_dir, output_dir, workspace)
-    parser.print_help()
-    return 1
+    if args.check:
+        return run_check(verdandi, output)
+    if args.list:
+        return run_list(verdandi)
+    return run_all(verdandi, output)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -45,21 +45,13 @@ from draupnir.structures.top_level import (
 )
 
 
-STAGE_SUFFIXES = ("_raw", "_resolved", "_reduced")
-
-
 def defs_key(cache_key: str) -> str:
-    """Convert cache key to $defs key, stripping pipeline stage suffixes.
+    """Convert cache key to $defs key.
 
-    'simplegroup/context_item_raw' -> 'simplegroup__context_item'
-    'atom/string_plain' -> 'atom__string_plain' (no suffix, unchanged)
+    'simplegroup/context_item_raw' -> 'simplegroup__context_item_raw'
+    'atom/string_plain' -> 'atom__string_plain'
     """
-    tier, name = cache_key.split("/", 1)
-    for suffix in STAGE_SUFFIXES:
-        if name.endswith(suffix):
-            name = name[: -len(suffix)]
-            break
-    return f"{tier}__{name}"
+    return cache_key.replace("/", "__")
 
 
 def build_or_ref(
@@ -101,6 +93,7 @@ def build_simplegroup_refs(
                 build_conditional_entry(name, entry.only_when, entry.always_when, entry.not_when),
             )
     return SchemaObject(
+        title=simplegroup.title,
         properties=properties,
         required=tuple(required_keys) if required_keys else None,
         additional_properties=False,
@@ -118,6 +111,7 @@ def build_tuple_refs(
     """Tuple -> {prefixItems, items: false} with $defs-aware item building."""
     prefix = tuple(build_or_ref(item, reverse, shared, defs) for item in tuple_model.items)
     return SchemaTupleArray(
+        title=tuple_model.title,
         prefix_items=prefix,
         description=tuple_model.description,
         min_items=len(prefix),
@@ -133,6 +127,7 @@ def build_simplearray_refs(
 ) -> SchemaArray:
     """Simplearray -> {type: array, items} with $defs-aware item building."""
     return SchemaArray(
+        title=simplearray.title,
         items=build_or_ref(simplearray.items, reverse, shared, defs),
         description=simplearray.description,
     )
@@ -149,7 +144,7 @@ def build_union_refs(
         build_or_ref(member, reverse, shared, defs)
         for member in union_model.union
     )
-    return SchemaOneOfField(one_of=members, description=union_model.description)
+    return SchemaOneOfField(title=union_model.title, one_of=members, description=union_model.description)
 
 
 def concat_field_description(vf: VerdandiField) -> str:
@@ -175,11 +170,12 @@ def build_verdandi_field_refs(
     if isinstance(inner, SchemaRef):
         return SchemaRef(
             ref=inner.ref,
+            title=vf.title,
             description=combined,
             x_semantic=semantic,
             x_constraint=constraint,
         )
-    updates: dict = {"description": combined}
+    updates: dict = {"title": vf.title, "description": combined}
     if isinstance(inner, (SchemaField, SchemaArray)):
         if semantic:
             updates["x_semantic"] = semantic
@@ -232,7 +228,7 @@ def build_array(
         items = SchemaOneOf(one_of=item_schemas)
     else:
         items = build_or_ref(array.items, reverse, shared, defs)
-    return SchemaArray(items=items, description=array.description)
+    return SchemaArray(title=array.title, items=items, description=array.description)
 
 
 def build_superarray(
@@ -250,7 +246,7 @@ def build_superarray(
         items = SchemaOneOf(one_of=item_schemas)
     else:
         items = build_or_ref(superarray.items, reverse, shared, defs)
-    return SchemaArray(items=items, description=superarray.description)
+    return SchemaArray(title=superarray.title, items=items, description=superarray.description)
 
 
 def build_group_properties(
@@ -308,6 +304,7 @@ def build_group(
         group, reverse, shared, defs,
     )
     return SchemaObject(
+        title=group.title,
         properties=properties,
         required=tuple(required_keys) if required_keys else None,
         additional_properties=False,
@@ -329,6 +326,7 @@ def build_section(
         properties[name] = build_or_ref(component, reverse, shared, defs)
         required_keys.append(name)
     return SchemaObject(
+        title=section.title,
         properties=properties,
         required=tuple(required_keys) if required_keys else None,
         additional_properties=False,
@@ -372,6 +370,7 @@ def build_shallowsection(
                 properties[name] = build_or_ref(ref, reverse, shared, defs)
 
     return SchemaObject(
+        title=shallowsection.title,
         properties=properties,
         required=tuple(required_keys) if required_keys else None,
         additional_properties=False,

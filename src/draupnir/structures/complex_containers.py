@@ -50,6 +50,7 @@ class Array(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    title: str
     items: SimplegroupRef | ArrayOneOf
     description: str
 
@@ -138,6 +139,7 @@ class Group(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    title: str
     description: str
     fields: GroupFields | None = None
     containers: GroupContainers | None = None
@@ -176,5 +178,6 @@ class Superarray(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    title: str
     items: GroupOrSimplegroupRef | SuperarrayOneOf
     description: str

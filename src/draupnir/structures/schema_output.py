@@ -209,6 +209,7 @@ class SchemaRef(BaseModel):
     model_config = ConfigDict(frozen=True, populate_by_name=True)
 
     ref: str = Field(alias="$ref")
+    title: str | None = None
     description: str | None = None
     x_semantic: SchemaSemanticExt | None = Field(
         default=None,
@@ -228,6 +229,7 @@ class SchemaField(BaseModel):
 
     model_config = ConfigDict(frozen=True, populate_by_name=True)
 
+    title: str | None = None
     type: str
     description: str | None = None
     const: str | None = None
@@ -260,6 +262,7 @@ class SchemaOneOfField(BaseModel):
 
     model_config = ConfigDict(frozen=True, populate_by_name=True)
 
+    title: str | None = None
     one_of: tuple[SchemaField | SchemaRef, ...] = Field(alias="oneOf")
     description: str | None = None
 
@@ -269,6 +272,7 @@ class SchemaObject(BaseModel):
 
     model_config = ConfigDict(frozen=True, populate_by_name=True)
 
+    title: str | None = None
     type: str = "object"
     description: str | None = None
     properties: dict[
@@ -307,6 +311,7 @@ class SchemaArray(BaseModel):
 
     model_config = ConfigDict(frozen=True, populate_by_name=True)
 
+    title: str | None = None
     type: str = "array"
     description: str | None = None
     items: "SchemaObject | SchemaOneOf | SchemaField | SchemaOneOfField | SchemaRef"
@@ -328,6 +333,7 @@ class SchemaTupleArray(BaseModel):
 
     model_config = ConfigDict(frozen=True, populate_by_name=True)
 
+    title: str | None = None
     type: str = "array"
     description: str | None = None
     prefix_items: tuple[SchemaField | SchemaRef, ...] = Field(alias="prefixItems")

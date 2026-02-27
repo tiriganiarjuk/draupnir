@@ -61,6 +61,7 @@ def build_atom(atom: Atom) -> SchemaField:
     pattern = atom.pattern.regex if atom.pattern else None
     not_constraint = build_excludes(atom.excludes) if atom.excludes else None
     return SchemaField(
+        title=atom.title,
         type=atom.type,
         pattern=pattern,
         not_=not_constraint,
@@ -71,6 +72,7 @@ def build_atom(atom: Atom) -> SchemaField:
 def build_enum(enum_model: VerdandiEnum) -> SchemaField:
     """Enum -> {type: string, enum: [...]}."""
     return SchemaField(
+        title=enum_model.title,
         type="string",
         enum=enum_model.values,
         description=enum_model.description,
@@ -81,6 +83,7 @@ def build_element(element: Element) -> SchemaField:
     """Element -> inherits atom/enum schema, adds format."""
     base = build_field(element.inherits)
     return SchemaField(
+        title=element.title,
         type=base.type,
         pattern=base.pattern,
         enum=base.enum,
@@ -93,13 +96,13 @@ def build_element(element: Element) -> SchemaField:
 def build_union(union_model: Union_) -> SchemaOneOfField:
     """Union -> {oneOf: [member schemas]}."""
     members = tuple(build_field(member) for member in union_model.union)
-    return SchemaOneOfField(one_of=members, description=union_model.description)
+    return SchemaOneOfField(title=union_model.title, one_of=members, description=union_model.description)
 
 
 def build_field(model: Pattern | Atom | VerdandiEnum | Element | Union_) -> SchemaField | SchemaOneOfField:
     """Dispatch field model to its builder."""
     if isinstance(model, Pattern):
-        return SchemaField(type="string", pattern=model.regex, description=model.description)
+        return SchemaField(title=model.title, type="string", pattern=model.regex, description=model.description)
     if isinstance(model, Atom):
         return build_atom(model)
     if isinstance(model, VerdandiEnum):
@@ -116,6 +119,7 @@ def build_tuple(tuple_model: Tuple_) -> SchemaTupleArray:
     """Tuple -> {prefixItems: [...], items: false}."""
     prefix = tuple(build_field(item) for item in tuple_model.items)
     return SchemaTupleArray(
+        title=tuple_model.title,
         prefix_items=prefix,
         description=tuple_model.description,
         min_items=len(prefix),
@@ -126,6 +130,7 @@ def build_tuple(tuple_model: Tuple_) -> SchemaTupleArray:
 def build_simplearray(simplearray: Simplearray) -> SchemaArray:
     """Simplearray -> {type: array, items: {field}}."""
     return SchemaArray(
+        title=simplearray.title,
         items=build_simple(simplearray.items),
         description=simplearray.description,
     )
@@ -174,6 +179,7 @@ def build_verdandi_field(vf: VerdandiField) -> SchemaField | SchemaOneOfField | 
     else:
         combined = field_desc
     updates: dict[str, str | SchemaSemanticExt | SchemaConstraintBlock] = {
+        "title": vf.title,
         "description": combined,
     }
     if isinstance(inner, (SchemaField, SchemaArray)):
@@ -216,6 +222,7 @@ def build_simplegroup(simplegroup: Simplegroup) -> SchemaObject:
             )
 
     return SchemaObject(
+        title=simplegroup.title,
         properties=properties,
         required=tuple(required_keys) if required_keys else None,
         additional_properties=False,

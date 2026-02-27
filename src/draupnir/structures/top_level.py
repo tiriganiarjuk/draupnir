@@ -43,6 +43,7 @@ class Section(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    title: str
     description: str
     components: dict[str, ComplexContainerRef]
 
@@ -109,6 +110,7 @@ class Shallowsection(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    title: str
     description: str
     required: dict[str, FieldItemRef] | None = None
     optional: dict[str, FieldItemRef] | None = None
@@ -129,6 +131,7 @@ class Schema(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    title: str
     version: int
     description: str
     required: tuple[str, ...] | None = None

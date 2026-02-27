@@ -36,6 +36,7 @@ class Tuple_(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    title: str
     items: tuple[FieldRef, ...]
     constraint: str | None = None
     description: str
@@ -54,6 +55,7 @@ class VerdandiField(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    title: str
     type: FieldTypeRef
     description: str
     semantic: SemanticBlock | None = None
@@ -73,6 +75,7 @@ class Simplearray(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    title: str
     items: FieldItemRef
     description: str
 
@@ -111,6 +114,7 @@ class Simplegroup(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    title: str
     description: str
     required: dict[str, SimplegroupItemRef] | None = None
     optional: dict[str, SimplegroupItemRef] | None = None

@@ -19,6 +19,7 @@ class Pattern(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    title: str
     regex: str
     description: str
 
@@ -31,6 +32,7 @@ class Atom(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    title: str
     type: Literal["string", "integer", "boolean"]
     pattern: PatternRef | None = None
     excludes: tuple[PatternRef, ...] | None = None
@@ -42,6 +44,7 @@ class Enum(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    title: str
     values: tuple[str | int | bool, ...]
     description: str
 
@@ -54,6 +57,7 @@ class Element(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    title: str
     inherits: AtomOrEnumRef
     format: str | None = None
     required: Literal["mandatory"] | None = None
@@ -73,6 +77,7 @@ class Union_(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    title: str
     union: tuple[UnionMemberRef, ...]
     description: str
 

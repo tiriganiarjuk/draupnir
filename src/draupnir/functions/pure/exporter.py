@@ -11,7 +11,7 @@ from collections.abc import Iterator
 
 from pydantic import BaseModel
 
-from draupnir.functions.pure.build_containers import build_or_ref
+from draupnir.functions.pure.build_containers import build_or_ref, defs_key
 from draupnir.structures.schema_output import (
     SchemaDocument,
     SchemaNullableObject,
@@ -69,6 +69,25 @@ def shared_keys(counts: dict[str, int]) -> frozenset[str]:
     return frozenset(key for key, count in counts.items() if count >= 2)
 
 
+def validate_defs_keys(shared: frozenset[str]) -> None:
+    """Verify stripped $defs keys don't collide within one schema.
+
+    Each schema walks one pipeline stage, so stage variants like
+    context_item_raw and context_item never co-occur. This check
+    catches violations of that invariant at generation time.
+    """
+    seen: dict[str, str] = {}
+    for cache_key in shared:
+        def_name = defs_key(cache_key)
+        if def_name in seen:
+            msg = (
+                f"$defs collision: '{def_name}' from both "
+                f"'{seen[def_name]}' and '{cache_key}'"
+            )
+            raise ValueError(msg)
+        seen[def_name] = cache_key
+
+
 def build_schema_properties(
     schema: Schema,
     reverse: dict[int, str],
@@ -104,6 +123,7 @@ def export_schema(
     reverse = reverse_cache_index(cache)
     counts = count_refs(schema, reverse)
     shared = shared_keys(counts)
+    validate_defs_keys(shared)
     defs: dict[str, BaseModel] = {}
     properties = build_schema_properties(schema, reverse, shared, defs)
     schema_name = schema_key.split("/", 1)[1]

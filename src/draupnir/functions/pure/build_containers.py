@@ -45,9 +45,21 @@ from draupnir.structures.top_level import (
 )
 
 
+STAGE_SUFFIXES = ("_raw", "_resolved", "_reduced")
+
+
 def defs_key(cache_key: str) -> str:
-    """Convert cache key to $defs key: 'simplegroup/foo' -> 'simplegroup__foo'."""
-    return cache_key.replace("/", "__")
+    """Convert cache key to $defs key, stripping pipeline stage suffixes.
+
+    'simplegroup/context_item_raw' -> 'simplegroup__context_item'
+    'atom/string_plain' -> 'atom__string_plain' (no suffix, unchanged)
+    """
+    tier, name = cache_key.split("/", 1)
+    for suffix in STAGE_SUFFIXES:
+        if name.endswith(suffix):
+            name = name[: -len(suffix)]
+            break
+    return f"{tier}__{name}"
 
 
 def build_or_ref(

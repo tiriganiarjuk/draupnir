@@ -389,7 +389,7 @@ class SchemaDocument(BaseModel):
     )
     defs: dict[
         str,
-        SchemaObject | SchemaArray | SchemaTupleArray | SchemaField | SchemaOneOfField | SchemaRef,
+        "SchemaObject | SchemaArray | SchemaTupleArray | SchemaField | SchemaOneOfField | SchemaRef",
     ] | None = Field(
         default=None,
         alias="$defs",

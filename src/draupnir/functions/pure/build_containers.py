@@ -26,11 +26,13 @@ from draupnir.structures.fields import Union_
 from draupnir.structures.schema_output import (
     SchemaArray,
     SchemaConditional,
+    SchemaConstraintBlock,
     SchemaField,
     SchemaObject,
     SchemaOneOf,
     SchemaOneOfField,
     SchemaRef,
+    SchemaSemanticExt,
     SchemaTupleArray,
 )
 from draupnir.structures.simple_containers import (
@@ -147,35 +149,35 @@ def build_union_refs(
     return SchemaOneOfField(title=union_model.title, one_of=members, description=union_model.description)
 
 
-def concat_field_description(vf: VerdandiField) -> str:
+def concat_field_description(field: VerdandiField) -> str:
     """Build concatenated description from field + type descriptions."""
-    field_desc = vf.description.strip()
-    type_desc = vf.type.description
+    field_desc = field.description.strip()
+    type_desc = field.type.description
     if type_desc and type_desc.strip() != field_desc:
         return f"{field_desc}\n{type_desc.strip()}"
     return field_desc
 
 
 def build_verdandi_field_refs(
-    vf: VerdandiField,
+    field: VerdandiField,
     reverse: dict[int, str],
     shared: frozenset[str],
     defs: dict[str, BaseModel],
 ) -> BaseModel:
     """VerdandiField -> inner type schema with $defs-aware building."""
-    inner = build_or_ref(vf.type, reverse, shared, defs)
-    combined = concat_field_description(vf)
-    semantic = convert_semantic(vf.semantic) if vf.semantic else None
-    constraint = convert_constraints(vf.constraint) if vf.constraint else None
+    inner = build_or_ref(field.type, reverse, shared, defs)
+    combined = concat_field_description(field)
+    semantic = convert_semantic(field.semantic) if field.semantic else None
+    constraint = convert_constraints(field.constraint) if field.constraint else None
     if isinstance(inner, SchemaRef):
         return SchemaRef(
             ref=inner.ref,
-            title=vf.title,
+            title=field.title,
             description=combined,
             x_semantic=semantic,
             x_constraint=constraint,
         )
-    updates: dict = {"title": vf.title, "description": combined}
+    updates: dict[str, str | SchemaSemanticExt | SchemaConstraintBlock] = {"title": field.title, "description": combined}
     if isinstance(inner, (SchemaField, SchemaArray)):
         if semantic:
             updates["x_semantic"] = semantic

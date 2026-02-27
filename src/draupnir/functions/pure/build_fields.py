@@ -52,7 +52,7 @@ def build_excludes(
     if len(excludes) == 1:
         return SchemaPatternConstraint(pattern=excludes[0].regex)
     return SchemaAnyOfConstraint(
-        any_of=tuple(SchemaPatternConstraint(pattern=p.regex) for p in excludes),
+        any_of=tuple(SchemaPatternConstraint(pattern=excl.regex) for excl in excludes),
     )
 
 
@@ -136,29 +136,29 @@ def build_simplearray(simplearray: Simplearray) -> SchemaArray:
     )
 
 
-def convert_semantic(sb: SemanticBlock) -> SchemaSemanticExt:
+def convert_semantic(block: SemanticBlock) -> SchemaSemanticExt:
     """SemanticBlock -> SchemaSemanticExt for JSON Schema output."""
     return SchemaSemanticExt(
-        intent=sb.intent or "",
-        severity=sb.severity or "warning",
-        checks=sb.checks,
-        anti_patterns=sb.anti_patterns,
+        intent=block.intent or "",
+        severity=block.severity or "warning",
+        checks=block.checks,
+        anti_patterns=block.anti_patterns,
     )
 
 
-def convert_constraint_rule(cr: ConstraintRule) -> SchemaConstraintEntry:
+def convert_constraint_rule(rule: ConstraintRule) -> SchemaConstraintEntry:
     """ConstraintRule -> SchemaConstraintEntry for JSON Schema output."""
-    data: dict[str, str | tuple[str, ...] | None] = {
-        "rule": cr.rule,
-        "severity": cr.severity,
-        "reason": cr.reason,
-        "field": cr.field,
+    fields = {
+        "rule": rule.rule,
+        "severity": rule.severity,
+        "reason": rule.reason,
+        "field": rule.field,
     }
-    if cr.order is not None:
-        data["order"] = cr.order
-    if cr.values is not None:
-        data["in"] = cr.values
-    return SchemaConstraintEntry.model_validate(data)
+    if rule.order is not None:
+        fields["order"] = rule.order
+    if rule.values is not None:
+        fields["in"] = rule.values
+    return SchemaConstraintEntry.model_validate(fields)
 
 
 def convert_constraints(
@@ -169,24 +169,24 @@ def convert_constraints(
     return SchemaConstraintBlock(constraints=entries)
 
 
-def build_verdandi_field(vf: VerdandiField) -> SchemaField | SchemaOneOfField | SchemaTupleArray | SchemaArray:
+def build_verdandi_field(field: VerdandiField) -> SchemaField | SchemaOneOfField | SchemaTupleArray | SchemaArray:
     """VerdandiField -> inner type schema with description + extensions."""
-    inner = build_simple(vf.type)
+    inner = build_simple(field.type)
     type_desc = inner.description
-    field_desc = vf.description.strip()
+    field_desc = field.description.strip()
     if type_desc and type_desc.strip() != field_desc:
         combined = f"{field_desc}\n{type_desc.strip()}"
     else:
         combined = field_desc
     updates: dict[str, str | SchemaSemanticExt | SchemaConstraintBlock] = {
-        "title": vf.title,
+        "title": field.title,
         "description": combined,
     }
     if isinstance(inner, (SchemaField, SchemaArray)):
-        if vf.semantic:
-            updates["x_semantic"] = convert_semantic(vf.semantic)
-        if vf.constraint:
-            updates["x_constraint"] = convert_constraints(vf.constraint)
+        if field.semantic:
+            updates["x_semantic"] = convert_semantic(field.semantic)
+        if field.constraint:
+            updates["x_constraint"] = convert_constraints(field.constraint)
     return inner.model_copy(update=updates)
 
 

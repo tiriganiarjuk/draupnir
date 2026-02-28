@@ -1,11 +1,11 @@
 """Top-level models: Section, Shallowsection, Schema.
 
-Section holds components (complex containers only). Shallowsection
+Section holds containers (complex containers only). Shallowsection
 mixes fields and containers at top level with max 2 containers.
 Schema is the root — references sections, shallowsections, or both (at least one).
 
 Ref type aliases defined here:
-  ComplexContainerRef — group | array | superarray (for section components)
+  ComplexContainerRef — group | array | superarray (for section containers)
   ShallowContainerRef — simplearray | array | superarray | group (for shallowsection)
   ShallowFieldConditionalRef — VerdandiField only (shallowsection conditionals)
   SectionOnlyRef — section only (for schema.sections)
@@ -38,14 +38,23 @@ ComplexContainerRef = Annotated[
 ]
 
 
+class SectionContainers(BaseModel):
+    """Container zones for a section — required/optional."""
+
+    model_config = ConfigDict(frozen=True)
+
+    required: dict[str, ComplexContainerRef] | None = None
+    optional: dict[str, ComplexContainerRef] | None = None
+
+
 class Section(BaseModel):
-    """Top-level container — components only, no direct fields."""
+    """Top-level container — containers only, no direct fields."""
 
     model_config = ConfigDict(frozen=True)
 
     title: str
     description: str
-    components: dict[str, ComplexContainerRef]
+    containers: SectionContainers
 
 
 # --- Shallowsection ---

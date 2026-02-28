@@ -217,9 +217,9 @@ def build_simplegroup(simplegroup: Simplegroup) -> SchemaObject:
     if simplegroup.conditional:
         for name, entry in simplegroup.conditional.items():
             properties[name] = build_simple(entry.ref)
-            conditionals.append(
-                build_conditional_entry(name, entry.only_when, entry.always_when, entry.not_when),
-            )
+            cond = build_conditional_entry(name, entry.only_when, entry.always_when, entry.not_when)
+            if cond is not None:
+                conditionals.append(cond)
 
     return SchemaObject(
         title=simplegroup.title,
@@ -240,18 +240,32 @@ def build_if_condition(when: ConditionalWhen) -> SchemaCondition:
     return SchemaCondition(properties={when.field: constraint})
 
 
+def is_cross_section(when: ConditionalWhen | None) -> bool:
+    """Check if a conditional references a cross-section field path."""
+    return when is not None and "." in when.field
+
+
 def build_conditional_entry(
     field_name: str,
     only_when: ConditionalWhen | None,
     always_when: ConditionalWhen | None,
     not_when: ConditionalWhen | None,
-) -> SchemaConditional:
+) -> SchemaConditional | None:
     """Build if/then/else from conditional when values.
 
     only_when: required when true, forbidden when false.
     always_when: required when true, no effect when false.
     not_when: forbidden when true, no effect when false.
+
+    Returns None for cross-section conditionals (dotted field paths).
+    These are hoisted to root level by the exporter.
     """
+    active = only_when or always_when or not_when
+    if active is None:
+        msg = "exactly one of only_when/always_when/not_when must be set"
+        raise ValueError(msg)
+    if is_cross_section(active):
+        return None
     if only_when:
         return SchemaConditional(
             if_=build_if_condition(only_when),

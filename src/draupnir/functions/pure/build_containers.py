@@ -273,9 +273,9 @@ def build_group_properties(
         if group.fields.conditional:
             for name, entry in group.fields.conditional.items():
                 properties[name] = build_or_ref(entry.ref, reverse, shared, defs)
-                conditionals.append(
-                    build_conditional_entry(name, entry.only_when, entry.always_when, entry.not_when),
-                )
+                cond = build_conditional_entry(name, entry.only_when, entry.always_when, entry.not_when)
+                if cond is not None:
+                    conditionals.append(cond)
 
     if group.containers:
         if group.containers.required:
@@ -288,9 +288,9 @@ def build_group_properties(
         if group.containers.conditional:
             for name, entry in group.containers.conditional.items():
                 properties[name] = build_or_ref(entry.ref, reverse, shared, defs)
-                conditionals.append(
-                    build_conditional_entry(name, entry.only_when, entry.always_when, entry.not_when),
-                )
+                cond = build_conditional_entry(name, entry.only_when, entry.always_when, entry.not_when)
+                if cond is not None:
+                    conditionals.append(cond)
 
     return properties, required_keys, conditionals
 
@@ -321,12 +321,16 @@ def build_section(
     shared: frozenset[str],
     defs: dict[str, BaseModel],
 ) -> SchemaObject:
-    """Section -> {type: object, properties (components)}."""
+    """Section -> {type: object, properties (containers)}."""
     properties: dict[str, BaseModel] = {}
     required_keys: list[str] = []
-    for name, component in section.components.items():
-        properties[name] = build_or_ref(component, reverse, shared, defs)
-        required_keys.append(name)
+    if section.containers.required:
+        for name, ref in section.containers.required.items():
+            properties[name] = build_or_ref(ref, reverse, shared, defs)
+            required_keys.append(name)
+    if section.containers.optional:
+        for name, ref in section.containers.optional.items():
+            properties[name] = build_or_ref(ref, reverse, shared, defs)
     return SchemaObject(
         title=section.title,
         properties=properties,
@@ -358,9 +362,9 @@ def build_shallowsection(
     if shallowsection.conditional:
         for name, entry in shallowsection.conditional.items():
             properties[name] = build_or_ref(entry.ref, reverse, shared, defs)
-            conditionals.append(
-                build_conditional_entry(name, entry.only_when, entry.always_when, entry.not_when),
-            )
+            cond = build_conditional_entry(name, entry.only_when, entry.always_when, entry.not_when)
+            if cond is not None:
+                conditionals.append(cond)
 
     if shallowsection.containers:
         if shallowsection.containers.required:

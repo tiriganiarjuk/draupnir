@@ -1316,7 +1316,7 @@ Level dispatch:
 - [ ] $defs keys follow `level__name` pattern
 - [ ] $ref pointers are `#/$defs/level__name`
 - [ ] Shared node detection uses cache path identity
-- [ ] Each build_* function < 50 lines
+- [ ] Each build_* function is single-purpose (gleipnir enforced)
 - [ ] model_dump_json() is NOT called in builder (that's the writer's job)
 - [ ] `uv run pytest tests/test_guardrails.py` passes
 
@@ -1355,7 +1355,7 @@ Level dispatch:
 1. Run `draupnir --all` — generate all 12+ schemas
 2. Compare output to old schemas — same structure, same fields
 3. Run `draupnir --check` — verify no drift
-4. Run downstream: `deploy_nornir_validators.py` (if applicable)
+4. Run downstream: `tools/nornir/deploy_gates.py` (if applicable)
 5. Run downstream: `generate_structures.py` (if applicable)
 6. Run `scaffold_definition.py` — verify output handles $ref
 7. Run `inspect_schema.py` — verify HTML output handles $ref

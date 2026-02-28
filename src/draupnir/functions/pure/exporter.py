@@ -11,8 +11,10 @@ from collections.abc import Iterator
 
 from pydantic import BaseModel
 
-from draupnir.functions.pure.build_containers import build_or_ref
+from draupnir.functions.pure.build_containers import build_model, build_or_ref
+from draupnir.functions.pure.build_cross_section import collect_schema_conditionals
 from draupnir.structures.schema_output import (
+    SchemaArray,
     SchemaDocument,
     SchemaNullableObject,
     SchemaNullType,
@@ -106,6 +108,7 @@ def export_schema(
     shared = shared_keys(counts)
     defs: dict[str, BaseModel] = {}
     properties = build_schema_properties(schema, reverse, shared, defs)
+    cross_section = collect_schema_conditionals(schema)
     schema_name = schema_key.split("/", 1)[1]
     return SchemaDocument(
         schema_uri="https://json-schema.org/draft/2020-12/schema",
@@ -116,7 +119,43 @@ def export_schema(
         properties=properties,
         additional_properties=False,
         defs=defs if defs else None,
+        all_of=cross_section,
     )
+
+
+def wrap_array_as_object(array: SchemaArray) -> SchemaObject:
+    """Wrap a SchemaArray in a SchemaObject with an 'items' property.
+
+    TOML root is always a table — bare arrays can't be represented.
+    Include files use 'items' as the key for their array content.
+    """
+    return SchemaObject(
+        title=array.title,
+        description=array.description,
+        properties={"items": array},
+        required=("items",),
+        additional_properties=False,
+    )
+
+
+def export_fragment(
+    model: BaseModel,
+    cache: dict[str, BaseModel],
+) -> tuple[BaseModel, dict[str, BaseModel]]:
+    """Build a standalone schema fragment from any Verdandi model.
+
+    Array fragments are wrapped in an object with an 'items' property
+    so they can validate TOML include files (TOML root is always a table).
+    Returns the built schema model and any accumulated $defs.
+    """
+    reverse = reverse_cache_index(cache)
+    counts = count_refs(model, reverse)
+    shared = shared_keys(counts)
+    defs: dict[str, BaseModel] = {}
+    built = build_model(model, reverse, shared, defs)
+    if isinstance(built, SchemaArray):
+        built = wrap_array_as_object(built)
+    return built, defs
 
 
 def export_all_schemas(

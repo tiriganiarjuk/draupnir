@@ -2,7 +2,7 @@
 
 ## 1. Purpose Statement
 
-Draupnir is a schema generator that reads Verdandi YAML composition hierarchies (14 level directories, ~178 files in `tools/verdandi/`) and produces JSON Schema documents (12 schemas in `schemas/`) plus HTML sidecar visualizations. It replaces the monolithic `tools/agent_schema.py` (1710 lines) with a structured, functional, Gleipnir-compliant architecture built on frozen Pydantic models, supply-driven loading, and strict pure/impure separation. This CONTEXT_MAP helps new agents orient to where knowledge about draupnir lives across the workspace and helps working LLMs know exactly which file to read when they need to refresh specific understanding mid-session.
+Draupnir is a schema generator that reads Verdandi YAML composition hierarchies (15 level directories, ~348 files in `tools/verdandi/`) and produces JSON Schema documents (13 schemas in `schemas/`) plus HTML sidecar visualizations. It replaces the monolithic `tools/agent_schema.py` (1710 lines) with a structured, functional, Gleipnir-compliant architecture built on frozen Pydantic models, supply-driven loading, and strict pure/impure separation. This CONTEXT_MAP helps new agents orient to where knowledge about draupnir lives across the workspace and helps working LLMs know exactly which file to read when they need to refresh specific understanding mid-session.
 
 ---
 
@@ -28,10 +28,10 @@ All `documentation/` files that cover draupnir topics, identified from the DOCUM
 | Rebuild STATUS | `documentation/pipeline/CRITICAL_DECISIONS.md` | Design decisions D1-D11, pipeline status, draupnir rebuild tracking | Partially updated during reconciliation: "8 levels" corrected to 14 in some places; D3 still references "8-level hierarchy" (see ALERT 3) |
 | Agent and Skill Generation | `documentation/operations/AGENT_AND_SKILL_GENERATION.md` | Pipeline context: old TOML system dismantled, current pipeline flow through draupnir, terminology migration | Current; references draupnir as the active schema generator |
 | Agent Decomposition | `documentation/toolcompose/AGENT_DECOMPOSITION.md` | 10-agent inventory, shared 10-section structure, schema requirements draupnir must satisfy | Current; structural analysis that informed schema design |
-| Hierarchy Rebuild Design | `documentation/toolcompose/HIERARCHY_REBUILD_DESIGN.md` | Design decisions that drove the current 14-level system, level split rationale, compile-time enforcement rules | Updated during reconciliation: level table corrected from 12 to 14 levels |
+| Hierarchy Rebuild Design | `documentation/toolcompose/HIERARCHY_REBUILD_DESIGN.md` | Design decisions that drove the current 15-level system, level split rationale, compile-time enforcement rules | Updated during reconciliation: level table corrected from 12 to 15 levels |
 | Schema Composition Explained | `documentation/toolcompose/SCHEMA_COMPOSITION_EXPLAINED_BY_LLM_FOR_LLM.md` | LLM-oriented operational guide: 5 documented mistake patterns, hierarchy as capability ladder, generator should enforce not fall back | Updated during reconciliation: "How the Generator Works" rewritten for current architecture; Quick Reference table still uses old level names (see ALERT 2) |
 | Tool Compose Reasoning | `documentation/toolcompose/TOOL_COMPOSE_REASONING.md` | Multilayered constraint architecture, constrained tool pattern, capability intersection model, two-stage resolve-then-format rationale | Current; design rationale that explains why draupnir's output structure matters |
-| Why Schema Composition | `documentation/toolcompose/WHY_SCHEMA_COMPOSITION_IS_THE_KEY.md` | Design philosophy: lifecycle stage modeling, DAG gets schema validation for free, hierarchical locking | Updated during reconciliation: level table corrected from 5 to current 14 levels |
+| Why Schema Composition | `documentation/toolcompose/WHY_SCHEMA_COMPOSITION_IS_THE_KEY.md` | Design philosophy: lifecycle stage modeling, DAG gets schema validation for free, hierarchical locking | Updated during reconciliation: level table corrected from 5 to current 15 levels |
 | Definition Format | `documentation/pipeline/DEFINITION_FORMAT.md` | Full agent definition tree spec (all 6 sections) that draupnir schemas validate | Current; the authoritative format spec |
 
 ---
@@ -40,22 +40,23 @@ All `documentation/` files that cover draupnir topics, identified from the DOCUM
 
 Schemas in `schemas/` that relate to draupnir's input or output.
 
-### Produced by Draupnir (12 schemas from `tools/verdandi/schema/*.yaml`)
+### Produced by Draupnir (13 schemas from `tools/verdandi/schema/*.yaml`)
 
 | Schema File | Pipeline Stage |
 |-------------|---------------|
 | `schemas/agent-raw-definition.schema.json` | Entry point: validates authored TOML definitions |
 | `schemas/agent-paths-resolved.schema.json` | After path absolutization |
-| `schemas/agent-includes-resolved.schema.json` | After @include expansion |
+| `schemas/agent-includes-merged.schema.json` | After @include expansion |
 | `schemas/agent-permissions-resolved.schema.json` | After permission calculation |
 | `schemas/agent-instructions-reduced.schema.json` | After instruction processing |
 | `schemas/agent-examples-reduced.schema.json` | After example processing |
 | `schemas/agent-guardrails-reduced.schema.json` | After guardrail processing |
-| `schemas/agent-sf-reduced.schema.json` | After SF processing |
+| `schemas/agent-success-reduced.schema.json` | After success/failure processing |
 | `schemas/agent-criteria-merged.schema.json` | After criteria merging |
 | `schemas/agent-execution-merged.schema.json` | After execution merging |
 | `schemas/agent-universal-format.schema.json` | Final universal format output |
 | `schemas/agent-universal-render.schema.json` | Render-ready universal format |
+| `schemas/agent-anthropic-render.schema.json` | Anthropic-specific render format |
 
 ### Not Produced by Draupnir (other generators)
 
@@ -77,9 +78,9 @@ What draupnir reads FROM.
 
 | Dependency | Path | Description |
 |------------|------|-------------|
-| Verdandi YAML files | `tools/verdandi/{level}/*.yaml` | 14 level directories (pattern, enum, atom, element, union, tuple, simplearray, simplegroup, array, group, superarray, section, shallowsection, schema) containing ~178 YAML composition type files. This is draupnir's sole input source. |
+| Verdandi YAML files | `tools/verdandi/{level}/*.yaml` | 15 level directories (pattern, enum, atom, element, union, tuple, field, simplearray, simplegroup, array, group, superarray, section, shallowsection, schema) containing ~348 YAML composition type files. This is draupnir's sole input source. |
 | Verdandi composition rules | `tools/verdandi/COMPOSITION_RULES.md` | Hierarchy enforcement rules and tier containment constraints that draupnir validates at compile time via typed ref aliases |
-| Gleipnir rules | `tools/draupnir/.gleipnir/rules.toml` | Structural constraints (50-line max functions, 5-param max, 4 nesting depth max) enforced during development |
+| Gleipnir rules | `tools/draupnir/.gleipnir/rules.toml` | Structural constraints enforced at runtime — violations mean the function does too much |
 | Gleipnir tests config | `tools/draupnir/.gleipnir/tests.toml` | Test configuration for guardrail checks |
 
 ---
@@ -147,7 +148,7 @@ For an LLM mid-session that needs to refresh specific understanding.
 |------------------------------|-----------|
 | The loading pipeline (supply-driven, level-ordered, BeforeValidator ref conversion) | `tools/draupnir/QUICKSTART.md` "The Loading Pipeline" section; or `context/draupnir.md` "Phase 1: Loading" |
 | The export pipeline ($defs detection, tree walk, SchemaDocument assembly) | `context/draupnir.md` "Phase 2: Exporting"; source: `functions/pure/exporter.py` |
-| The Verdandi hierarchy as draupnir sees it (14 levels, 4 tiers, tier containment) | `context/draupnir.md` "Verdandi Composition Hierarchy" tables; `tools/verdandi/COMPOSITION_RULES.md` |
+| The Verdandi hierarchy as draupnir sees it (15 levels, 4 tiers, tier containment) | `context/draupnir.md` "Verdandi Composition Hierarchy" tables; `tools/verdandi/COMPOSITION_RULES.md` |
 | Pure/impure separation (why IO is in exactly 2 files) | `tools/draupnir/CLAUDE.md` "IO Externalization" section; `tools/draupnir/QUICKSTART.md` "Two-Boundary IO Design" |
 | Design rationale and history (why the rebuild happened, what changed) | `tools/draupnir/DRAUPNIR_REDESIGN.md` sections 1-6; `documentation/toolcompose/WHY_SCHEMA_COMPOSITION_IS_THE_KEY.md` |
 | Anti-patterns and failure modes (what NOT to do) | `tools/draupnir/CLAUDE.md` "You Will Get These Things Wrong" (13 items); `tools/draupnir/QUICKSTART.md` "What NOT to Do" |
@@ -169,7 +170,7 @@ For an LLM mid-session that needs to refresh specific understanding.
 
 **ALERT 2: Quick Reference table uses old level names.** The "Quick Reference: When to Do What" table in `documentation/toolcompose/SCHEMA_COMPOSITION_EXPLAINED_BY_LLM_FOR_LLM.md` maps actions to old directory names (`primitives/`, `composed/`, `supergroups/`, `superarrays/`) instead of current Verdandi names. An LLM following it literally would target non-existent directories. The document header has been annotated, but the table itself remains stale.
 
-**ALERT 3: CRITICAL_DECISIONS.md D3 references "8-level hierarchy".** The D3 design decision (mandatory propagation, fail-and-report) still says "build schema from 8-level hierarchy" when draupnir now loads 14 levels. The principle is correct regardless of level count; the reference is historically accurate but factually stale.
+**ALERT 3: CRITICAL_DECISIONS.md D3 references "8-level hierarchy".** The D3 design decision (mandatory propagation, fail-and-report) still says "build schema from 8-level hierarchy" when draupnir now loads 15 levels. The principle is correct regardless of level count; the reference is historically accurate but factually stale.
 
 ### From Reconciliation Log (2026-02-26)
 
@@ -177,6 +178,8 @@ Seven documentation files were consulted during reconciliation:
 - 7 enrichments added to `context/draupnir.md` (one per source document)
 - 7 stale documentation items fixed (level counts updated, architecture descriptions rewritten)
 - All fixes are noted in the reconciliation log at the bottom of `context/draupnir.md`
+
+**ALERT 4: test_pipeline.py assertions are stale.** `EXPECTED_SCHEMA_COUNT = 12` but actual schema count is 13 (agent-anthropic-render added). The expected levels set in `test_all_levels_represented` is missing `"field"`. Both tests currently FAIL. See `context/discrepancy_ALERT_draupnir.md`.
 
 ### Pipeline Status
 

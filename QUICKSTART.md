@@ -1,25 +1,29 @@
-# Draupnir -- Quickstart
+# Draupnir QUICKSTART
 
-## What It Does
-
-Draupnir is a schema generator. It reads Verdandi YAML composition files from `tools/verdandi/` (14 level directories, ~178 files) and produces JSON Schema documents in `schemas/` (currently 12 schemas). It also generates HTML sidecar visualizations via `tools/inspect_schema.py`.
+Draupnir is a schema generator. It reads Verdandi YAML composition files from `tools/verdandi/` (15 level directories, ~348 files) and produces JSON Schema documents in `schemas/` (13 pipeline-stage schemas + 7 include-fragment schemas) plus HTML sidecar visualizations.
 
 ---
 
 ## How to Run
 
 ```bash
+# From the draupnir tool directory
+cd /Users/johnny/.ai/spaces/bragi/tools/draupnir
+
 # Generate all schemas + HTML sidecars (default mode)
-draupnir
+uv run draupnir --all
 
 # Check for drift without writing (exit 1 if any schema drifted)
-draupnir --check
+uv run draupnir --check
 
 # List available schema filenames
-draupnir --list
+uv run draupnir --list
+
+# Generate standalone include-fragment schemas
+uv run draupnir --fragments
 
 # Override directories
-draupnir --verdandi-dir /path/to/verdandi --output-dir /path/to/output --workspace /path/to/root
+uv run draupnir --verdandi-dir /path/to/verdandi --output-dir /path/to/output --workspace /path/to/root
 ```
 
 The CLI auto-discovers the workspace root by walking up from its location looking for `tools/verdandi/`.
@@ -28,7 +32,7 @@ The CLI auto-discovers the workspace root by walking up from its location lookin
 
 **Running tests:**
 ```bash
-cd tools/draupnir
+cd /Users/johnny/.ai/spaces/bragi/tools/draupnir
 uv run pytest tests/
 uv run pytest tests/test_guardrails.py   # Gleipnir structural checks -- run FREQUENTLY
 ```
@@ -38,18 +42,27 @@ uv run pytest tests/test_guardrails.py   # Gleipnir structural checks -- run FRE
 ## Input / Output
 
 **Reads:**
-- `tools/verdandi/{level}/*.yaml` -- 14 directories (pattern, enum, atom, element, union, tuple, simplearray, simplegroup, array, group, superarray, section, shallowsection, schema)
+- `tools/verdandi/{level}/*.yaml` -- 15 directories (pattern, enum, atom, element, union, tuple, field, simplearray, simplegroup, array, group, superarray, section, shallowsection, schema)
 - Each YAML file is validated into a frozen Pydantic model specific to its level
 
 **Produces:**
-- `schemas/*.schema.json` -- JSON Schema documents (Draft 2020-12)
+- `schemas/agent-*.schema.json` -- 13 pipeline-stage JSON Schema documents (Draft 2020-12)
+- `schemas/include-*.schema.json` -- 7 include-fragment schemas
 - `schemas/*.schema.json.html` -- HTML visualization sidecars (via inspect_schema.py)
 
-**Currently generates 12 schemas**, including:
-- `agent-raw-definition.schema.json`
-- `agent-universal-format.schema.json`
-- `agent-universal-render.schema.json`
-- And 9 others for intermediate pipeline stages
+**Pipeline-stage schemas include:**
+- `agent-raw-definition.schema.json` (entry point)
+- `agent-paths-resolved.schema.json`, `agent-permissions-resolved.schema.json`
+- `agent-instructions-reduced.schema.json`, `agent-examples-reduced.schema.json`
+- `agent-guardrails-reduced.schema.json`, `agent-criteria-merged.schema.json`
+- `agent-execution-merged.schema.json`, `agent-universal-format.schema.json`
+- `agent-universal-render.schema.json`, and others
+
+**Fragment schemas include:**
+- `include-success-criteria.schema.json`, `include-failure-criteria.schema.json`
+- `include-execution-instructions.schema.json`, `include-example-entries.schema.json`
+- `include-example-group.schema.json`, `include-guardrails-constraints.schema.json`
+- `include-guardrails-anti-patterns.schema.json`
 
 ---
 
@@ -67,6 +80,7 @@ IMPURE: loader.py  --reads-->  Verdandi YAML
 PURE:  exporter.py  --walks-->  model tree
        build_fields.py          |
        build_containers.py      SchemaDocument models
+       build_cross_section.py   |
                                    |
 IMPURE: writer.py  --writes-->  JSON Schema files + HTML sidecars
 ```
@@ -77,23 +91,25 @@ IMPURE: writer.py  --writes-->  JSON Schema files + HTML sidecars
 src/draupnir/
   cli.py                         # CLI: parse args, dispatch to pipeline
   structures/                    # Frozen Pydantic models (data only, zero methods)
-    fields.py                    # Pattern, Atom, Enum, Element, Union_
-    simple_containers.py         # Tuple_, Simplearray, Simplegroup
-    complex_containers.py        # Array, Group, Superarray
-    conditionals.py              # ConditionalWhen
-    top_level.py                 # Section, Shallowsection, Schema
+    conditionals.py              # ConditionalWhen predicate
+    field.py                     # SemanticBlock, ConstraintRule sub-models
+    fields.py                    # Pattern, Atom, Enum, Element, Union_ (Tier 1)
+    simple_containers.py         # Tuple_, VerdandiField, Simplearray, Simplegroup (Tier 2)
+    complex_containers.py        # Array, Group, Superarray + OneOf variants (Tier 3)
+    top_level.py                 # Section, Shallowsection, Schema (Tier 4)
     levels.py                    # Level enum (load order = declaration order)
-    schema_output.py             # JSON Schema output models
+    schema_output.py             # JSON Schema output models (SchemaDocument, etc.)
   functions/
     pure/                        # No side effects
       pydantic_validators.py     # ref_from_cache (string -> cached model)
       build_fields.py            # Field/simple container -> JSON Schema
       build_containers.py        # Complex container/section -> JSON Schema + $defs
+      build_cross_section.py     # Cross-section conditional -> root allOf entries
       exporter.py                # Tree walk, shared detection, SchemaDocument assembly
     impure/                      # File IO only
-      loader.py                  # Supply-driven YAML loader
-      writer.py                  # JSON serialization + HTML sidecar
-      pipeline.py                # Orchestration (run_all, run_check, run_list)
+      loader.py                  # Supply-driven YAML loader (ONLY file reader)
+      writer.py                  # JSON serialization + HTML sidecar (ONLY file writer)
+      pipeline.py                # Orchestration (run_all, run_check, run_list, run_fragments)
 ```
 
 ### The Loading Pipeline
@@ -112,7 +128,16 @@ After loading, the cache holds the entire tree as frozen models that hold their 
 2. Walk model tree counting ref occurrences; keys with count >= 2 are shared
 3. Build JSON Schema output models from the Verdandi input models
 4. Shared models go to `$defs`; subsequent refs become `$ref` pointers
-5. Assemble `SchemaDocument` per schema-level entry in the cache
+5. Cross-section conditionals (dotted field paths) are hoisted to root `allOf`
+6. Assemble `SchemaDocument` per schema-level entry in the cache
+
+### The Fragment Pipeline
+
+1. Same loading as above (full cache)
+2. Look up specific cache keys from `FRAGMENT_REGISTRY` in pipeline.py
+3. Build each as a standalone schema via `export_fragment()`
+4. Array fragments are wrapped in `{"items": ...}` object (TOML root must be a table)
+5. Write with `$schema`/`$id` metadata added at serialization boundary
 
 ---
 
@@ -134,7 +159,7 @@ These are documented failure modes from previous sessions. Each has caused signi
 
 **DO NOT add methods to models.** Structures are frozen data containers. Zero methods. Logic lives in `functions/`.
 
-**DO NOT write functions over 50 lines.** Gleipnir enforces this. Decompose.
+**DO NOT write long functions.** Each function does one thing. If it's growing, decompose. Gleipnir enforces this structurally.
 
 **DO NOT use `Any` anywhere.** Every value has a known type.
 
@@ -150,27 +175,36 @@ These are documented failure modes from previous sessions. Each has caused signi
 
 | Resource | Location | Purpose |
 |----------|----------|---------|
-| **CLAUDE.md** | `tools/draupnir/CLAUDE.md` | Anti-patterns, recovery sources, Gleipnir discipline, context refresh protocol |
+| **CLAUDE.md** | `tools/draupnir/CLAUDE.md` | Anti-patterns (13 failure modes), recovery sources, Gleipnir discipline, context refresh protocol |
+| **CONTEXT_MAP.md** | `tools/draupnir/CONTEXT_MAP.md` | Source code map, upstream/downstream deps, where knowledge lives |
+| **Context Summary** | `context/draupnir.md` | Architecture overview, pipeline phases, tier hierarchy, ref type system, design decisions |
 | **Design Doc** | `tools/draupnir/DRAUPNIR_REDESIGN.md` | Full architecture (~57K): models, loading, export, $defs, gated plan, anti-patterns |
-| **Verdandi YAML** | `tools/verdandi/` | The actual input files (14 level directories) |
 | **Composition Rules** | `tools/verdandi/COMPOSITION_RULES.md` | Hierarchy spec, tier containment rules |
-| **Gleipnir Rules** | `tools/draupnir/.gleipnir/rules.toml` (inherited) | Structural constraints (50-line functions, 5 params, etc.) |
-| **Schema Output** | `schemas/*.schema.json` | The produced JSON Schema files |
-| **inspect_schema.py** | `tools/inspect_schema.py` | HTML sidecar generator called by writer |
-| **nornir** | `tools/nornir/` | Rust validation tool consuming the schemas |
+| **Gleipnir Rules** | `tools/draupnir/.gleipnir/rules.toml` | Structural constraints enforced at runtime |
 
 ---
 
 ## Verdandi Hierarchy (What Draupnir Consumes)
 
 ```
-Tier 1 - Fields:           pattern -> atom -> enum -> element -> union
-Tier 2 - Simple Containers: tuple, simplearray, simplegroup
+Tier 1 - Fields:            pattern, enum, atom, element, union
+Tier 2 - Simple Containers: tuple, field (VerdandiField), simplearray, simplegroup
 Tier 3 - Complex Containers: array, group, superarray
-Tier 4 - Top Level:         section, shallowsection, schema
+Tier 4 - Top Level:          section, shallowsection, schema
 ```
 
-Load order = bottom to top. References only point downward (a group can reference an array, but an array cannot reference a group). This is enforced by the typed ref aliases on each model.
+Load order = bottom to top (Level enum declaration order). References only point downward (a group can reference an array, but an array cannot reference a group). This is enforced by typed ref aliases on each model with union type constraints.
+
+---
+
+## Downstream: After Schema Generation
+
+After draupnir regenerates schemas:
+
+1. **Rebuild nornir** to embed updated schemas: `cd tools/nornir && cargo build --release`
+2. **transform_to_universal** auto-generates Pydantic models from the new schemas
+3. **inspect_schema.py** reads the generated schemas for HTML visualization (called automatically during `--all`)
+4. **scaffold_definition.py** reads `agent-raw-definition.schema.json` for TOML scaffolding
 
 ---
 
@@ -180,6 +214,7 @@ Load order = bottom to top. References only point downward (a group can referenc
 2. **Models hold models** -- not strings, not dicts, not IDs
 3. **Cache key format** -- `"level_name/file_stem"` (e.g., `"atom/kebab_string"`)
 4. **$defs key format** -- `"level__name"` (slash replaced with double underscore)
-5. **Output filename format** -- `"name.schema.json"` (schema key without the "schema/" prefix)
+5. **Output filename format** -- `"name.schema.json"` (schema key without the `"schema/"` prefix)
 6. **All models are frozen** -- `ConfigDict(frozen=True)` on every model
-7. **12 schemas currently expected** -- `EXPECTED_SCHEMA_COUNT = 12` in test_pipeline.py
+7. **13 pipeline schemas + 7 fragment schemas** -- from 13 Verdandi `schema/*.yaml` root definitions
+8. **Serialization happens once** -- `model_dump_json(by_alias=True, exclude_none=True)` in writer.py only

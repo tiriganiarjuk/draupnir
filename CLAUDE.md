@@ -71,9 +71,9 @@ None of them felt uncertain while doing it.
 **Why it's wrong:** Models in `structures/` are frozen data containers. Zero methods. Validators that enforce structural invariants (like "at least one of required/optional/conditional") are the ONE exception — and even those are simple boolean checks, not logic.
 **Recovery:** Look at the models. They're `ConfigDict(frozen=True)` with typed fields. That's it.
 
-### Writing functions > 50 lines
-**Detection:** If you're at line 40 and still going...
-**Why it's wrong:** Gleipnir enforces this structurally. But more importantly: a function over 50 lines is doing more than one thing. Decompose NOW, not later. "I'll clean this up later" means it ships broken.
+### Writing long functions
+**Detection:** If you're still writing and the function keeps growing...
+**Why it's wrong:** A long function is doing more than one thing. Decompose NOW, not later. "I'll clean this up later" means it ships broken. Gleipnir will catch it — but the real problem is architectural, not numerical.
 **Recovery:** Split the function. Each piece does one thing.
 
 ### Using `Any` anywhere
@@ -164,7 +164,7 @@ This will be a long coding session with frequent compaction. After each compacti
 
 5. **Am I loading on demand?** No. Supply-driven. Glob levels in order. Cache is pre-filled.
 
-6. **Are my functions under 50 lines?** Run `uv run pytest tests/test_guardrails.py` NOW.
+6. **Are my functions small and single-purpose?** Run `uv run pytest tests/test_guardrails.py` NOW.
 
 7. **Is IO only in loader.py and writer.py?** If `Path` or `open()` appears anywhere else, STOP.
 
@@ -229,8 +229,8 @@ a file is in the wrong location — that's an architectural problem, not a namin
 
 ### Errors Are Signal: Error clusters point to architectural problems
 
-When guardrails report 5 functions over 50 lines in builder.py, the problem is NOT
-those 5 functions. The problem is the builder architecture. Error clusters are a MAP:
+When guardrails report multiple long functions in builder.py, the problem is NOT
+those functions. The problem is the builder architecture. Error clusters are a MAP:
 
 - **Type clusters** → WHAT is wrong (scattered Any = boundary discipline broke)
 - **Location clusters** → WHERE to fix (all in pipeline.py = pipeline architecture wrong)
@@ -302,12 +302,12 @@ inheritance, massive constructors all violate multiple constraints simultaneousl
 **MANDATORY:** Run `uv run pytest tests/test_guardrails.py` FREQUENTLY during development.
 
 Key constraints (enforced, not advisory):
-- **Max 50 lines per function** — decompose if approaching
-- **Max 5 parameters** — create a structure if you need 6
-- **Max 4 nesting depth** — extract inner logic
-- **Max quarantined files** — IO-touching files are limited
+- **Functions do one thing** — if it's getting long, decompose
+- **Few parameters** — if you need more, create a structure
+- **Shallow nesting** — extract inner logic into named functions
+- **Quarantine budget** — IO-touching files are limited
 
-**Reference:** `.gleipnir/rules.toml`
+Gleipnir enforces these structurally. If a check fails, the function does too much — extract, don't compress.
 
 ---
 

@@ -7,4 +7,4 @@
 
 [quarantine]
 unsafe_files = []
-boundary_files = []
+boundary_files = ["functions/impure/writer.py"]

@@ -12,6 +12,7 @@ from draupnir.functions.impure.pipeline import (
     resolve_paths,
     run_all,
     run_check,
+    run_fragments,
     run_list,
 )
 
@@ -52,6 +53,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="List available schemas",
     )
+    group.add_argument(
+        "--fragments",
+        action="store_true",
+        help="Generate include-fragment schemas",
+    )
     parser.add_argument(
         "--verdandi-dir",
         type=Path,
@@ -85,6 +91,8 @@ def main() -> int:
         return run_check(verdandi, output)
     if args.list:
         return run_list(verdandi)
+    if args.fragments:
+        return run_fragments(verdandi, output, workspace)
     return run_all(verdandi, output, workspace)
 
 

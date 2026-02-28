@@ -14,10 +14,11 @@ from pydantic import BaseModel
 from draupnir.functions.impure.loader import load_all_levels
 from draupnir.functions.impure.writer import (
     serialize_schema,
+    write_fragment,
     write_schema,
     write_sidecar,
 )
-from draupnir.functions.pure.exporter import export_all_schemas
+from draupnir.functions.pure.exporter import export_all_schemas, export_fragment
 
 
 def resolve_paths(
@@ -71,6 +72,39 @@ def run_check(
         else:
             sys.stdout.write(f"OK      {out.name}\n")
     return 1 if drift else 0
+
+
+FRAGMENT_REGISTRY: tuple[tuple[str, str], ...] = (
+    ("include-success-criteria", "array/success_criteria_reduced"),
+    ("include-failure-criteria", "array/failure_criteria_reduced"),
+    ("include-execution-instructions", "array/execution_instructions_reduced"),
+    ("include-example-entries", "array/example_entries_reduced"),
+    ("include-example-group", "group/example_group_reduced"),
+    ("include-guardrails-constraints", "simplearray/guardrails_constraints"),
+    ("include-guardrails-anti-patterns", "simplearray/guardrails_anti_patterns"),
+)
+
+
+def run_fragments(
+    verdandi_root: Path,
+    output_dir: Path,
+    workspace_root: Path,
+) -> int:
+    """Export standalone include-fragment schemas."""
+    cache: dict[str, BaseModel] = {}
+    load_all_levels(verdandi_root, cache)
+    for output_name, cache_key in FRAGMENT_REGISTRY:
+        model = cache.get(cache_key)
+        if model is None:
+            sys.stderr.write(f"ERROR: {cache_key} not in cache\n")
+            return 1
+        built, defs = export_fragment(model, cache)
+        schema_id = f"{output_name}.schema.json"
+        out = output_dir / schema_id
+        write_fragment(built, defs, schema_id, out)
+        write_sidecar(out, workspace_root)
+        sys.stdout.write(f"wrote {out.name}\n")
+    return 0
 
 
 def run_list(verdandi_root: Path) -> int:

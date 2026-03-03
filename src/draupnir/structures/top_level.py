@@ -16,7 +16,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, model_validator
 
-from draupnir.functions.pure.pydantic_validators import ref_from_cache
+from draupnir.functions.impure.pydantic_validators import ref_from_cache
 from draupnir.structures.conditionals import ConditionalWhen
 from draupnir.structures.complex_containers import (
     Array,
@@ -149,10 +149,13 @@ class Schema(BaseModel):
     shallowsections: dict[str, ShallowsectionOnlyRef] | None = None
 
     @model_validator(mode="after")
-    def at_least_one_section_type(self) -> "Schema":
+    def exactly_one_section_type(self) -> "Schema":
         has_sections = self.sections is not None
         has_shallow = self.shallowsections is not None
         if not has_sections and not has_shallow:
-            msg = "at least one of sections/shallowsections must be set"
+            msg = "exactly one of sections/shallowsections must be set, got neither"
+            raise ValueError(msg)
+        if has_sections and has_shallow:
+            msg = "sections and shallowsections are mutually exclusive, got both"
             raise ValueError(msg)
         return self

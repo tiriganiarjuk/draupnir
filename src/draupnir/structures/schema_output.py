@@ -211,6 +211,7 @@ class SchemaRef(BaseModel):
     ref: str = Field(alias="$ref")
     title: str | None = None
     description: str | None = None
+    min_length: int | None = Field(default=None, alias="minLength")
     x_semantic: SchemaSemanticExt | None = Field(
         default=None,
         alias="x-semantic",
@@ -238,6 +239,7 @@ class SchemaField(BaseModel):
     enum: tuple[str | int | bool, ...] | None = None
     default: str | bool | int | None = None
     minimum: int | None = None
+    min_length: int | None = Field(default=None, alias="minLength")
     not_: SchemaPatternConstraint | SchemaAnyOfConstraint | None = Field(
         default=None,
         alias="not",

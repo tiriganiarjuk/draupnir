@@ -10,26 +10,44 @@ from draupnir.structures.simple_containers import (
     Simplegroup,
     SimplegroupConditionalEntry,
     Tuple_,
+    VerdandiField,
 )
 
 
 @pytest.fixture
 def cache():
     atom_str = Atom.model_validate(
-        {"type": "string", "description": "plain string"},
+        {"title": "Str", "type": "string", "description": "plain string"},
         context={"cache": {}},
     )
     atom_int = Atom.model_validate(
-        {"type": "integer", "description": "integer"},
+        {"title": "Int", "type": "integer", "description": "integer"},
         context={"cache": {}},
     )
-    enum_mode = Enum(values=("batch", "full"), description="mode")
-    pattern_rel = Pattern(regex=r"^\.", description="relative")
+    enum_mode = Enum(title="Mode", values=("batch", "full"), description="mode")
+    pattern_rel = Pattern(title="Relative", regex=r"^\.", description="relative")
     union_path = Union_.model_validate(
-        {"union": ["atom/str", "atom/int"], "description": "path any"},
+        {
+            "title": "PathAny",
+            "union": ["atom/str", "atom/int"],
+            "description": "path any",
+        },
         context={
             "cache": {"atom/str": atom_str, "atom/int": atom_int},
         },
+    )
+    # VerdandiField wrappers (containers see field membrane, not raw types)
+    field_str = VerdandiField(
+        title="FieldStr", type=atom_str, description="a string field",
+    )
+    field_int = VerdandiField(
+        title="FieldInt", type=atom_int, description="an integer field",
+    )
+    field_mode = VerdandiField(
+        title="FieldMode", type=enum_mode, description="a mode field",
+    )
+    field_path = VerdandiField(
+        title="FieldPath", type=union_path, description="a path field",
     )
     base = {
         "atom/str": atom_str,
@@ -37,10 +55,15 @@ def cache():
         "enum/mode": enum_mode,
         "pattern/rel": pattern_rel,
         "union/path": union_path,
+        "field/str": field_str,
+        "field/int": field_int,
+        "field/mode": field_mode,
+        "field/path": field_path,
     }
     # Build tuple and simplearray referencing field types
     tup = Tuple_.model_validate(
         {
+            "title": "BatchSize",
             "items": ["atom/int", "atom/int"],
             "constraint": "ascending_strict",
             "description": "batch size",
@@ -48,7 +71,7 @@ def cache():
         context={"cache": base},
     )
     sa = Simplearray.model_validate(
-        {"items": "atom/str", "description": "string list"},
+        {"title": "StringList", "items": "field/str", "description": "string list"},
         context={"cache": base},
     )
     base["tuple/batch"] = tup
@@ -108,6 +131,7 @@ class TestTuple:
     def test_resolves_items_from_cache(self, cache):
         tup = Tuple_.model_validate(
             {
+                "title": "Test",
                 "items": ["atom/str", "atom/int"],
                 "constraint": "ascending_strict",
                 "description": "test",
@@ -120,7 +144,7 @@ class TestTuple:
 
     def test_optional_constraint(self, cache):
         tup = Tuple_.model_validate(
-            {"items": ["atom/str"], "description": "test"},
+            {"title": "Test", "items": ["atom/str"], "description": "test"},
             context={"cache": cache},
         )
         assert tup.constraint is None
@@ -128,7 +152,11 @@ class TestTuple:
     def test_rejects_missing_cache_ref(self, cache):
         with pytest.raises(ValidationError):
             Tuple_.model_validate(
-                {"items": ["atom/nonexistent"], "description": "test"},
+                {
+                    "title": "Test",
+                    "items": ["atom/nonexistent"],
+                    "description": "test",
+                },
                 context={"cache": cache},
             )
 
@@ -136,38 +164,40 @@ class TestTuple:
 class TestSimplearray:
     def test_resolves_single_item_from_cache(self, cache):
         sa = Simplearray.model_validate(
-            {"items": "atom/str", "description": "test"},
+            {"title": "Test", "items": "field/str", "description": "test"},
             context={"cache": cache},
         )
-        assert sa.items is cache["atom/str"]
+        assert sa.items is cache["field/str"]
 
-    def test_accepts_union_ref(self, cache):
+    def test_accepts_union_field_ref(self, cache):
         sa = Simplearray.model_validate(
-            {"items": "union/path", "description": "test"},
+            {"title": "Test", "items": "field/path", "description": "test"},
             context={"cache": cache},
         )
-        assert sa.items is cache["union/path"]
+        assert sa.items is cache["field/path"]
 
 
 class TestSimplegroup:
     def test_required_zone_resolves_refs(self, cache):
         sg = Simplegroup.model_validate(
             {
+                "title": "Test",
                 "description": "test",
-                "required": {"name": "atom/str", "count": "atom/int"},
+                "required": {"name": "field/str", "count": "field/int"},
             },
             context={"cache": cache},
         )
         assert sg.required is not None
-        assert sg.required["name"] is cache["atom/str"]
-        assert sg.required["count"] is cache["atom/int"]
+        assert sg.required["name"] is cache["field/str"]
+        assert sg.required["count"] is cache["field/int"]
 
     def test_accepts_simplearray_in_required(self, cache):
         sg = Simplegroup.model_validate(
             {
+                "title": "Test",
                 "description": "test",
                 "required": {
-                    "label": "atom/str",
+                    "label": "field/str",
                     "items": "simplearray/strings",
                 },
             },
@@ -176,30 +206,32 @@ class TestSimplegroup:
         assert sg.required is not None
         assert sg.required["items"] is cache["simplearray/strings"]
 
-    def test_accepts_tuple_in_optional(self, cache):
+    def test_accepts_simplearray_in_optional(self, cache):
         sg = Simplegroup.model_validate(
             {
+                "title": "Test",
                 "description": "test",
-                "required": {"name": "atom/str"},
-                "optional": {"batch": "tuple/batch"},
+                "required": {"name": "field/str"},
+                "optional": {"items": "simplearray/strings"},
             },
             context={"cache": cache},
         )
         assert sg.optional is not None
-        assert sg.optional["batch"] is cache["tuple/batch"]
+        assert sg.optional["items"] is cache["simplearray/strings"]
 
     def test_rejects_all_zones_empty(self, cache):
         with pytest.raises(ValidationError):
             Simplegroup.model_validate(
-                {"description": "test"},
+                {"title": "Test", "description": "test"},
                 context={"cache": cache},
             )
 
     def test_optional_only_is_valid(self, cache):
         sg = Simplegroup.model_validate(
             {
+                "title": "Test",
                 "description": "test",
-                "optional": {"name": "atom/str"},
+                "optional": {"name": "field/str"},
             },
             context={"cache": cache},
         )
@@ -211,31 +243,31 @@ class TestSimplegroupConditional:
     def test_conditional_with_only_when(self, cache):
         entry = SimplegroupConditionalEntry.model_validate(
             {
-                "ref": "atom/str",
+                "ref": "field/str",
                 "only_when": {"field": "mode", "equals": "batch"},
             },
             context={"cache": cache},
         )
-        assert entry.ref is cache["atom/str"]
+        assert entry.ref is cache["field/str"]
         assert entry.only_when is not None
         assert entry.only_when.equals == "batch"
 
     def test_conditional_with_always_when(self, cache):
         entry = SimplegroupConditionalEntry.model_validate(
             {
-                "ref": "enum/mode",
+                "ref": "field/mode",
                 "always_when": {"field": "format", "in": ["json", "jsonl"]},
             },
             context={"cache": cache},
         )
-        assert entry.ref is cache["enum/mode"]
+        assert entry.ref is cache["field/mode"]
         assert entry.always_when is not None
         assert entry.always_when.in_ == ("json", "jsonl")
 
     def test_rejects_no_condition(self, cache):
         with pytest.raises(ValidationError):
             SimplegroupConditionalEntry.model_validate(
-                {"ref": "atom/str"},
+                {"ref": "field/str"},
                 context={"cache": cache},
             )
 
@@ -243,7 +275,7 @@ class TestSimplegroupConditional:
         with pytest.raises(ValidationError):
             SimplegroupConditionalEntry.model_validate(
                 {
-                    "ref": "atom/str",
+                    "ref": "field/str",
                     "only_when": {"field": "a", "equals": "x"},
                     "not_when": {"field": "b", "equals": "y"},
                 },
@@ -253,11 +285,12 @@ class TestSimplegroupConditional:
     def test_simplegroup_with_conditional_zone(self, cache):
         sg = Simplegroup.model_validate(
             {
+                "title": "Test",
                 "description": "test",
-                "required": {"mode": "enum/mode"},
+                "required": {"mode": "field/mode"},
                 "conditional": {
-                    "batch_size": {
-                        "ref": "tuple/batch",
+                    "extra": {
+                        "ref": "field/str",
                         "only_when": {
                             "field": "mode",
                             "equals": "batch",
@@ -268,7 +301,7 @@ class TestSimplegroupConditional:
             context={"cache": cache},
         )
         assert sg.conditional is not None
-        assert sg.conditional["batch_size"].ref is cache["tuple/batch"]
+        assert sg.conditional["extra"].ref is cache["field/str"]
 
     def test_conditional_accepts_simplearray_ref(self, cache):
         entry = SimplegroupConditionalEntry.model_validate(

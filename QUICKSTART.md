@@ -201,10 +201,12 @@ Load order = bottom to top (Level enum declaration order). References only point
 
 After draupnir regenerates schemas:
 
-1. **Rebuild nornir** to embed updated schemas: `cd tools/nornir && cargo build --release`
+1. **Deploy nornir gates + CLI checkers** to embed updated schemas: `cd tools/nornir && ./deploy_gates.py`
 2. **transform_to_universal** auto-generates Pydantic models from the new schemas
 3. **inspect_schema.py** reads the generated schemas for HTML visualization (called automatically during `--all`)
 4. **scaffold_definition.py** reads `agent-raw-definition.schema.json` for TOML scaffolding
+
+`deploy_gates.py` builds CLI binaries with cargo, builds gate modules with maturin, extracts `.so` files, creates symlinks, and verifies. Do NOT use bare `cargo build` — it skips gate deployment.
 
 ---
 

@@ -16,7 +16,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 
-from draupnir.functions.pure.pydantic_validators import ref_from_cache
+from draupnir.functions.impure.pydantic_validators import ref_from_cache
 from draupnir.structures.conditionals import ConditionalWhen
 from draupnir.structures.simple_containers import (
     FieldItemRef,

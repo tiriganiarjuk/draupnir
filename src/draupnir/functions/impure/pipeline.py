@@ -14,21 +14,31 @@ from pydantic import BaseModel
 from draupnir.functions.impure.loader import load_all_levels
 from draupnir.functions.impure.writer import (
     serialize_schema,
-    write_fragment,
     write_schema,
     write_sidecar,
 )
-from draupnir.functions.pure.exporter import export_all_schemas, export_fragment
+from draupnir.functions.impure.exporter import export_all_schemas, export_fragment
+from draupnir.structures.schema_output import SchemaDocument
 
 
 def resolve_paths(
     verdandi_dir: Path | None,
     output_dir: Path | None,
     workspace_root: Path,
+    project: str | None = None,
 ) -> tuple[Path, Path]:
-    """Resolve Verdandi and output directories from args or defaults."""
-    verdandi = verdandi_dir or workspace_root / "tools" / "verdandi"
-    output = output_dir or workspace_root / "schemas"
+    """Resolve Verdandi source and output directories.
+
+    With --project: reads verdandi/{project}/source/, writes verdandi/{project}/output/.
+    Explicit --verdandi-dir and --output-dir override the project-derived paths.
+    """
+    verdandi_root = workspace_root / "tools" / "verdandi"
+    if project:
+        verdandi = verdandi_dir or verdandi_root / project / "source"
+        output = output_dir or verdandi_root / project / "output"
+    else:
+        verdandi = verdandi_dir or verdandi_root
+        output = output_dir or workspace_root / "schemas"
     return verdandi, output
 
 
@@ -98,10 +108,20 @@ def run_fragments(
         if model is None:
             sys.stderr.write(f"ERROR: {cache_key} not in cache\n")
             return 1
-        built, defs = export_fragment(model, cache)
         schema_id = f"{output_name}.schema.json"
+        built, defs = export_fragment(model, cache)
+        document = SchemaDocument(
+            schema_uri="https://json-schema.org/draft/2020-12/schema",
+            schema_id=schema_id,
+            title=built.title,
+            description=built.description,
+            properties=built.properties,
+            required=built.required,
+            additional_properties=built.additional_properties,
+            defs=defs if defs else None,
+        )
         out = output_dir / schema_id
-        write_fragment(built, defs, schema_id, out)
+        write_schema(document, out)
         write_sidecar(out, workspace_root)
         sys.stdout.write(f"wrote {out.name}\n")
     return 0

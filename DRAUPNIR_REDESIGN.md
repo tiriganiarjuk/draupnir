@@ -1072,19 +1072,19 @@ src/draupnir/
     __init__.py
     impure/
       __init__.py
-      loader.py               # ~80 lines — load(), load_all_levels(), YAML IO
-      writer.py                # ~60 lines — serialize_schema(), write_schema(), write_sidecar()
-      pipeline.py              # ~50 lines — run_all(), run_check(), run_list()
+      loader.py               # load(), load_all_levels(), YAML IO
+      writer.py               # serialize_schema(), write_schema(), write_sidecar()
+      pipeline.py             # run_all(), run_check(), run_list()
     pure/
       __init__.py
-      pydantic_validators.py  # ~45 lines — ref_from_cache BeforeValidator
-      builder.py               # ~150 lines — export_schema(), collect_shared_nodes(), build_*()
+      pydantic_validators.py  # ref_from_cache BeforeValidator
+      builder.py              # export_schema(), collect_shared_nodes(), build_*()
 ```
 
 ### File size discipline
 
-No file exceeds 150 lines. If approaching that limit, decompose.
-Total source: ~1,000 lines (down from ~2,900 in old draupnir).
+Gleipnir enforces function and file constraints. If approaching limits, decompose.
+Dramatically smaller than old draupnir (~2,900 lines).
 
 ### What's NOT here
 

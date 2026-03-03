@@ -14,12 +14,12 @@ from draupnir.structures.fields import (
 
 @pytest.fixture
 def pattern_relative():
-    return Pattern(regex=r"^\.", description="Relative path prefix")
+    return Pattern(title="Relative", regex=r"^\.", description="Relative path prefix")
 
 
 @pytest.fixture
 def pattern_traversal():
-    return Pattern(regex=r"\.\.", description="Path traversal")
+    return Pattern(title="Traversal", regex=r"\.\.", description="Path traversal")
 
 
 @pytest.fixture
@@ -32,24 +32,27 @@ def cache(pattern_relative, pattern_traversal):
 
 class TestPattern:
     def test_validates_from_dict(self):
-        p = Pattern.model_validate({"regex": r"^\.", "description": "test"})
+        p = Pattern.model_validate(
+            {"title": "Test", "regex": r"^\.", "description": "test"},
+        )
         assert p.regex == r"^\."
         assert p.description == "test"
 
     def test_is_frozen(self):
-        p = Pattern(regex=".", description="test")
+        p = Pattern(title="Test", regex=".", description="test")
         with pytest.raises(ValidationError):
             p.regex = "new"  # type: ignore[misc]
 
     def test_rejects_missing_regex(self):
         with pytest.raises(ValidationError):
-            Pattern.model_validate({"description": "test"})
+            Pattern.model_validate({"title": "Test", "description": "test"})
 
 
 class TestAtom:
     def test_resolves_pattern_from_cache(self, cache, pattern_relative):
         atom = Atom.model_validate(
             {
+                "title": "Test",
                 "type": "string",
                 "pattern": "pattern/relative",
                 "description": "test",
@@ -63,6 +66,7 @@ class TestAtom:
     ):
         atom = Atom.model_validate(
             {
+                "title": "Test",
                 "type": "string",
                 "excludes": ["pattern/traversal"],
                 "description": "test",
@@ -74,7 +78,7 @@ class TestAtom:
 
     def test_accepts_integer_type(self):
         atom = Atom.model_validate(
-            {"type": "integer", "description": "test"},
+            {"title": "Test", "type": "integer", "description": "test"},
             context={"cache": {}},
         )
         assert atom.type == "integer"
@@ -82,7 +86,7 @@ class TestAtom:
     def test_rejects_invalid_type(self):
         with pytest.raises(ValidationError):
             Atom.model_validate(
-                {"type": "float", "description": "test"},
+                {"title": "Test", "type": "float", "description": "test"},
                 context={"cache": {}},
             )
 
@@ -90,6 +94,7 @@ class TestAtom:
         with pytest.raises(ValidationError):
             Atom.model_validate(
                 {
+                    "title": "Test",
                     "type": "string",
                     "pattern": "pattern/nonexistent",
                     "description": "test",
@@ -101,13 +106,13 @@ class TestAtom:
 class TestEnum:
     def test_validates_string_values(self):
         e = Enum.model_validate(
-            {"values": ["batch", "full"], "description": "test"}
+            {"title": "Test", "values": ["batch", "full"], "description": "test"},
         )
         assert e.values == ("batch", "full")
 
     def test_accepts_mixed_value_types(self):
         e = Enum.model_validate(
-            {"values": ["text", 42, True], "description": "test"}
+            {"title": "Test", "values": ["text", 42, True], "description": "test"},
         )
         assert len(e.values) == 3
 
@@ -115,12 +120,13 @@ class TestEnum:
 class TestElement:
     def test_resolves_inherits_from_cache(self, cache):
         atom = Atom.model_validate(
-            {"type": "string", "description": "base"},
+            {"title": "Base", "type": "string", "description": "base"},
             context={"cache": cache},
         )
         cache["atom/test"] = atom
         elem = Element.model_validate(
             {
+                "title": "Test",
                 "inherits": "atom/test",
                 "format": "exists",
                 "description": "test",
@@ -130,10 +136,11 @@ class TestElement:
         assert elem.inherits is atom
 
     def test_accepts_enum_inherits(self, cache):
-        enum = Enum(values=("a", "b"), description="test")
+        enum = Enum(title="Test", values=("a", "b"), description="test")
         cache["enum/test"] = enum
         elem = Element.model_validate(
             {
+                "title": "Test",
                 "inherits": "enum/test",
                 "format": "exists",
                 "description": "test",
@@ -144,12 +151,13 @@ class TestElement:
 
     def test_mandatory_without_format(self, cache):
         atom = Atom.model_validate(
-            {"type": "string", "description": "base"},
+            {"title": "Base", "type": "string", "description": "base"},
             context={"cache": cache},
         )
         cache["atom/test"] = atom
         elem = Element.model_validate(
             {
+                "title": "Test",
                 "inherits": "atom/test",
                 "required": "mandatory",
                 "description": "test",
@@ -163,17 +171,18 @@ class TestElement:
 class TestUnion:
     def test_resolves_members_from_cache(self, cache):
         atom_a = Atom.model_validate(
-            {"type": "string", "description": "a"},
+            {"title": "A", "type": "string", "description": "a"},
             context={"cache": cache},
         )
         atom_b = Atom.model_validate(
-            {"type": "integer", "description": "b"},
+            {"title": "B", "type": "integer", "description": "b"},
             context={"cache": cache},
         )
         cache["atom/a"] = atom_a
         cache["atom/b"] = atom_b
         u = Union_.model_validate(
             {
+                "title": "Test",
                 "union": ["atom/a", "atom/b"],
                 "description": "test",
             },
@@ -184,10 +193,13 @@ class TestUnion:
 
     def test_rejects_wrong_tier_ref(self, cache):
         """Union members must be atom/enum/element — not patterns."""
-        cache["pattern/test"] = Pattern(regex=".", description="test")
+        cache["pattern/test"] = Pattern(
+            title="Test", regex=".", description="test",
+        )
         with pytest.raises(ValidationError):
             Union_.model_validate(
                 {
+                    "title": "Test",
                     "union": ["pattern/test"],
                     "description": "test",
                 },

@@ -3,7 +3,13 @@
 ConditionalWhen models the predicate in only_when/always_when/not_when
 blocks. Each predicate targets a field path and matches either a single
 value (equals) or multiple values (in).
+
+ConditionalEntry is the structural type shared by all conditional entry
+models across tiers (SimplegroupConditionalEntry, GroupFieldConditionalEntry,
+etc). Used by zone collection primitives for polymorphic iteration.
 """
+
+from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -25,3 +31,19 @@ class ConditionalWhen(BaseModel):
             msg = "exactly one of 'equals' or 'in' must be set"
             raise ValueError(msg)
         return self
+
+
+class ConditionalEntry(Protocol):
+    """Structural type shared by all conditional entry models."""
+
+    @property
+    def ref(self) -> BaseModel: ...
+
+    @property
+    def only_when(self) -> ConditionalWhen | None: ...
+
+    @property
+    def always_when(self) -> ConditionalWhen | None: ...
+
+    @property
+    def not_when(self) -> ConditionalWhen | None: ...

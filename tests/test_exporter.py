@@ -22,7 +22,7 @@ from draupnir.structures.schema_output import (
     SchemaDocument,
     SchemaNullableObject,
 )
-from draupnir.structures.simple_containers import Simplegroup
+from draupnir.structures.simple_containers import Simplegroup, VerdandiField
 from draupnir.structures.top_level import (
     Schema,
     Shallowsection,
@@ -35,33 +35,49 @@ from draupnir.structures.top_level import (
 
 @pytest.fixture()
 def atom_string():
-    pattern = Pattern(regex="^[a-z]+$", description="lowercase")
-    return Atom(type="string", pattern=pattern, description="string")
+    pattern = Pattern(title="Lowercase", regex="^[a-z]+$", description="lowercase")
+    return Atom(title="String", type="string", pattern=pattern, description="string")
 
 
 @pytest.fixture()
 def atom_integer():
-    return Atom(type="integer", description="integer")
+    return Atom(title="Integer", type="integer", description="integer")
 
 
 @pytest.fixture()
-def shared_simplegroup(atom_string, atom_integer):
+def field_string(atom_string):
+    return VerdandiField(
+        title="Name", type=atom_string, description="a name field",
+    )
+
+
+@pytest.fixture()
+def field_integer(atom_integer):
+    return VerdandiField(
+        title="Count", type=atom_integer, description="a count field",
+    )
+
+
+@pytest.fixture()
+def shared_simplegroup(field_string, field_integer):
     """A simplegroup used by multiple parents (shared node)."""
     return Simplegroup(
-        required={"name": atom_string, "count": atom_integer},
+        title="SharedEntry",
+        required={"name": field_string, "count": field_integer},
         description="shared entry",
     )
 
 
 @pytest.fixture()
 def array_using_shared(shared_simplegroup):
-    return Array(items=shared_simplegroup, description="list A")
+    return Array(title="ListA", items=shared_simplegroup, description="list A")
 
 
 @pytest.fixture()
-def group_using_shared(shared_simplegroup, atom_string):
+def group_using_shared(shared_simplegroup, field_string):
     return Group(
-        fields=GroupFields(required={"label": atom_string}),
+        title="GroupB",
+        fields=GroupFields(required={"label": field_string}),
         containers=GroupContainers(required={"items": shared_simplegroup}),
         description="group B",
     )
@@ -69,13 +85,15 @@ def group_using_shared(shared_simplegroup, atom_string):
 
 @pytest.fixture()
 def cache_with_sharing(
-    atom_string, atom_integer, shared_simplegroup,
-    array_using_shared, group_using_shared,
+    atom_string, atom_integer, field_string, field_integer,
+    shared_simplegroup, array_using_shared, group_using_shared,
 ):
     """Cache where shared_simplegroup appears in 2 parents."""
     return {
         "atom/string": atom_string,
         "atom/integer": atom_integer,
+        "field/name": field_string,
+        "field/count": field_integer,
         "simplegroup/entry": shared_simplegroup,
         "array/list_a": array_using_shared,
         "group/group_b": group_using_shared,
@@ -104,7 +122,7 @@ class TestIterChildModels:
 
     def test_simplegroup_yields_dict_values(self, shared_simplegroup):
         children = list(iter_child_models(shared_simplegroup))
-        assert any(isinstance(child, Atom) for child in children)
+        assert any(isinstance(child, VerdandiField) for child in children)
 
     def test_array_yields_items(self, array_using_shared):
         children = list(iter_child_models(array_using_shared))
@@ -144,21 +162,23 @@ class TestSharedKeys:
 
 
 class TestExportSchema:
-    def test_produces_schema_document(self, atom_string, atom_integer):
+    def test_produces_schema_document(self, field_string, field_integer):
         shallow = Shallowsection(
-            required={"name": atom_string},
-            optional={"count": atom_integer},
+            title="Identity",
+            required={"name": field_string},
+            optional={"count": field_integer},
             description="identity",
         )
         schema = Schema(
+            title="Test",
             version=1,
             description="test schema",
             required=("name",),
             shallowsections={"identity": shallow},
         )
         cache: dict[str, BaseModel] = {
-            "atom/string": atom_string,
-            "atom/integer": atom_integer,
+            "field/name": field_string,
+            "field/count": field_integer,
             "shallowsection/identity": shallow,
             "schema/test": schema,
         }
@@ -168,19 +188,21 @@ class TestExportSchema:
         assert result.title == "Test"
         assert "identity" in result.properties
 
-    def test_nullable_wrapping(self, atom_string):
+    def test_nullable_wrapping(self, field_string):
         shallow = Shallowsection(
-            required={"name": atom_string},
+            title="Section",
+            required={"name": field_string},
             description="section",
         )
         schema = Schema(
+            title="NullableTest",
             version=1,
             description="nullable test",
             nullable=("section",),
             shallowsections={"section": shallow},
         )
         cache: dict[str, BaseModel] = {
-            "atom/string": atom_string,
+            "field/name": field_string,
             "shallowsection/identity": shallow,
             "schema/nullable": schema,
         }
@@ -192,19 +214,21 @@ class TestExportSchema:
 
 
 class TestExportAllSchemas:
-    def test_exports_only_schemas(self, atom_string, atom_integer):
+    def test_exports_only_schemas(self, field_string, field_integer):
         shallow = Shallowsection(
-            required={"name": atom_string},
+            title="Identity",
+            required={"name": field_string},
             description="identity",
         )
         schema = Schema(
+            title="Test",
             version=1,
             description="test",
             shallowsections={"identity": shallow},
         )
         cache: dict[str, BaseModel] = {
-            "atom/string": atom_string,
-            "atom/integer": atom_integer,
+            "field/name": field_string,
+            "field/count": field_integer,
             "shallowsection/identity": shallow,
             "schema/test": schema,
         }

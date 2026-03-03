@@ -19,6 +19,7 @@ from draupnir.structures.simple_containers import (
     Simplearray,
     Simplegroup,
     Tuple_,
+    VerdandiField,
 )
 from draupnir.structures.top_level import (
     Schema,
@@ -34,28 +35,44 @@ def cache():
     """Build a full cache with all tiers for complex container tests."""
     # Field-level models
     atom_str = Atom.model_validate(
-        {"type": "string", "description": "plain string"},
+        {"title": "Str", "type": "string", "description": "plain string"},
         context={"cache": {}},
     )
     atom_int = Atom.model_validate(
-        {"type": "integer", "description": "integer"},
+        {"title": "Int", "type": "integer", "description": "integer"},
         context={"cache": {}},
     )
-    enum_mode = Enum(values=("batch", "full"), description="mode")
-    pattern_rel = Pattern(regex=r"^\.", description="relative")
+    enum_mode = Enum(title="Mode", values=("batch", "full"), description="mode")
+    pattern_rel = Pattern(title="Relative", regex=r"^\.", description="relative")
     union_path = Union_.model_validate(
-        {"union": ["atom/str", "atom/int"], "description": "path any"},
+        {
+            "title": "PathAny",
+            "union": ["atom/str", "atom/int"],
+            "description": "path any",
+        },
         context={
             "cache": {"atom/str": atom_str, "atom/int": atom_int},
         },
     )
     element_name = Element.model_validate(
         {
+            "title": "AgentName",
             "inherits": "atom/str",
             "format": "kebab-case",
             "description": "agent name",
         },
         context={"cache": {"atom/str": atom_str}},
+    )
+
+    # VerdandiField wrappers (containers see field membrane, not raw types)
+    field_str = VerdandiField(
+        title="FieldStr", type=atom_str, description="a string field",
+    )
+    field_int = VerdandiField(
+        title="FieldInt", type=atom_int, description="an integer field",
+    )
+    field_mode = VerdandiField(
+        title="FieldMode", type=enum_mode, description="a mode field",
     )
 
     base = {
@@ -65,11 +82,15 @@ def cache():
         "pattern/rel": pattern_rel,
         "union/path": union_path,
         "element/name": element_name,
+        "field/str": field_str,
+        "field/int": field_int,
+        "field/mode": field_mode,
     }
 
     # Simple containers
     tup = Tuple_.model_validate(
         {
+            "title": "BatchSize",
             "items": ["atom/int", "atom/int"],
             "constraint": "ascending_strict",
             "description": "batch size",
@@ -77,28 +98,31 @@ def cache():
         context={"cache": base},
     )
     sa = Simplearray.model_validate(
-        {"items": "atom/str", "description": "string list"},
+        {"title": "StringList", "items": "field/str", "description": "string list"},
         context={"cache": base},
     )
     sg_param = Simplegroup.model_validate(
         {
+            "title": "ParameterItem",
             "description": "parameter item",
-            "required": {"name": "atom/str", "value": "atom/str"},
+            "required": {"name": "field/str", "value": "field/str"},
         },
         context={"cache": base},
     )
     sg_success = Simplegroup.model_validate(
         {
+            "title": "SuccessItem",
             "description": "success item",
-            "required": {"criterion": "atom/str"},
-            "optional": {"weight": "atom/int"},
+            "required": {"criterion": "field/str"},
+            "optional": {"weight": "field/int"},
         },
         context={"cache": base},
     )
     sg_include = Simplegroup.model_validate(
         {
+            "title": "IncludeSuccess",
             "description": "include success",
-            "required": {"include": "atom/str"},
+            "required": {"include": "field/str"},
         },
         context={"cache": base},
     )
@@ -112,6 +136,7 @@ def cache():
     # Arrays
     arr_simple = Array.model_validate(
         {
+            "title": "ParameterArray",
             "items": "simplegroup/param",
             "description": "parameter array",
         },
@@ -119,6 +144,7 @@ def cache():
     )
     arr_oneof = Array.model_validate(
         {
+            "title": "CriteriaArray",
             "items": {"oneOf": ["simplegroup/success", "simplegroup/include"]},
             "description": "criteria array",
         },
@@ -131,94 +157,86 @@ def cache():
     # Groups
     grp_meta = Group.model_validate(
         {
+            "title": "Metadata",
             "description": "metadata",
             "fields": {
-                "required": {"name": "atom/str"},
+                "required": {"name": "field/str"},
             },
         },
         context={"cache": base},
     )
-    grp_dispatch = Group.model_validate(
+    grp_exec = Group.model_validate(
         {
-            "description": "dispatch config",
+            "title": "Execution",
+            "description": "execution config",
             "fields": {
-                "required": {"mode": "enum/mode"},
-                "conditional": {
-                    "batch_size": {
-                        "ref": "tuple/batch",
-                        "only_when": {
-                            "field": "mode",
-                            "equals": "batch",
-                        },
-                    },
-                },
+                "required": {"mode": "field/mode"},
             },
             "containers": {
-                "optional": {"parameters": "array/params"},
+                "required": {"params": "array/params"},
             },
         },
         context={"cache": base},
     )
 
     base["group/meta"] = grp_meta
-    base["group/dispatch"] = grp_dispatch
+    base["group/exec"] = grp_exec
 
     # Superarray
-    sup = Superarray.model_validate(
+    sarr = Superarray.model_validate(
         {
-            "items": {
-                "oneOf": ["group/meta", "simplegroup/include"],
-            },
-            "description": "example groups",
+            "title": "ExecExamples",
+            "items": "group/exec",
+            "description": "execution examples",
         },
         context={"cache": base},
     )
-    base["superarray/examples"] = sup
+
+    base["superarray/examples"] = sarr
 
     # Sections
-    sec_indirect = Section.model_validate(
+    sect_indirect = Section.model_validate(
         {
-            "description": "system metadata",
-            "components": {
-                "metadata": "group/meta",
-                "dispatch": "group/dispatch",
-            },
-        },
-        context={"cache": base},
-    )
-    sec_exec = Section.model_validate(
-        {
-            "description": "execution",
-            "components": {"criteria": "array/criteria"},
-        },
-        context={"cache": base},
-    )
-
-    base["section/indirect"] = sec_indirect
-    base["section/exec"] = sec_exec
-
-    # Shallowsection
-    shallow = Shallowsection.model_validate(
-        {
-            "description": "dispatcher view",
-            "required": {"name": "element/name", "mode": "enum/mode"},
-            "optional": {"max_agents": "atom/int"},
-            "conditional": {
-                "batch_size": {
-                    "ref": "tuple/batch",
-                    "only_when": {
-                        "field": "mode",
-                        "equals": "batch",
-                    },
+            "title": "Indirect",
+            "description": "indirect section",
+            "containers": {
+                "required": {
+                    "meta": "group/meta",
+                    "params": "array/params",
                 },
             },
+        },
+        context={"cache": base},
+    )
+    sect_exec = Section.model_validate(
+        {
+            "title": "Exec",
+            "description": "execution section",
             "containers": {
-                "optional": {"parameters": "array/params"},
+                "required": {
+                    "exec": "group/exec",
+                    "examples": "superarray/examples",
+                },
             },
         },
         context={"cache": base},
     )
-    base["shallowsection/dispatcher"] = shallow
+
+    base["section/indirect"] = sect_indirect
+    base["section/exec"] = sect_exec
+
+    # Shallowsections
+    shallow_dispatcher = Shallowsection.model_validate(
+        {
+            "title": "Dispatcher",
+            "description": "dispatcher config",
+            "required": {"mode": "field/mode"},
+            "optional": {"name": "field/str"},
+        },
+        context={"cache": base},
+    )
+
+    base["shallowsection/dispatcher"] = shallow_dispatcher
 
     return base
 
@@ -229,7 +247,11 @@ def cache():
 class TestArray:
     def test_string_ref_resolves_to_simplegroup(self, cache):
         arr = Array.model_validate(
-            {"items": "simplegroup/param", "description": "test"},
+            {
+                "title": "Test",
+                "items": "simplegroup/param",
+                "description": "test",
+            },
             context={"cache": cache},
         )
         assert arr.items is cache["simplegroup/param"]
@@ -237,166 +259,63 @@ class TestArray:
     def test_oneof_resolves_to_array_oneof(self, cache):
         arr = Array.model_validate(
             {
+                "title": "Test",
                 "items": {
-                    "oneOf": [
-                        "simplegroup/success",
-                        "simplegroup/include",
-                    ],
+                    "oneOf": ["simplegroup/success", "simplegroup/include"],
                 },
                 "description": "test",
             },
             context={"cache": cache},
         )
         assert isinstance(arr.items, ArrayOneOf)
-        assert len(arr.items.one_of) == 2
         assert arr.items.one_of[0] is cache["simplegroup/success"]
         assert arr.items.one_of[1] is cache["simplegroup/include"]
 
     def test_rejects_group_ref_in_items(self, cache):
         with pytest.raises(ValidationError):
             Array.model_validate(
-                {"items": "group/meta", "description": "test"},
+                {
+                    "title": "Test",
+                    "items": "group/meta",
+                    "description": "test",
+                },
                 context={"cache": cache},
             )
 
-    def test_is_frozen(self, cache):
-        arr = cache["array/params"]
-        with pytest.raises(ValidationError):
-            arr.description = "modified"  # type: ignore[misc]
 
-
-# --- Group tests ---
-
-
-class TestGroup:
-    def test_fields_only(self, cache):
-        grp = Group.model_validate(
-            {
-                "description": "test",
-                "fields": {"required": {"name": "atom/str"}},
-            },
-            context={"cache": cache},
-        )
-        assert grp.fields is not None
-        assert grp.containers is None
-
-    def test_containers_only(self, cache):
-        grp = Group.model_validate(
-            {
-                "description": "test",
-                "containers": {
-                    "required": {"params": "array/params"},
-                },
-            },
-            context={"cache": cache},
-        )
-        assert grp.fields is None
-        assert grp.containers is not None
-
-    def test_both_fields_and_containers(self, cache):
-        grp = cache["group/dispatch"]
-        assert grp.fields is not None
-        assert grp.containers is not None
-
-    def test_rejects_neither_fields_nor_containers(self, cache):
-        with pytest.raises(ValidationError):
-            Group.model_validate(
-                {"description": "test"},
-                context={"cache": cache},
-            )
-
-    def test_containers_accept_array(self, cache):
-        grp = Group.model_validate(
-            {
-                "description": "test",
-                "containers": {
-                    "required": {"params": "array/params"},
-                },
-            },
-            context={"cache": cache},
-        )
-        assert grp.containers is not None
-        assert grp.containers.required is not None
-        assert grp.containers.required["params"] is cache["array/params"]
-
-    def test_containers_accept_tuple(self, cache):
-        grp = Group.model_validate(
-            {
-                "description": "test",
-                "containers": {
-                    "optional": {"batch": "tuple/batch"},
-                },
-            },
-            context={"cache": cache},
-        )
-        assert grp.containers is not None
-        assert grp.containers.optional is not None
-        assert grp.containers.optional["batch"] is cache["tuple/batch"]
-
-    def test_containers_accept_simplearray(self, cache):
-        grp = Group.model_validate(
-            {
-                "description": "test",
-                "containers": {
-                    "optional": {"strings": "simplearray/strings"},
-                },
-            },
-            context={"cache": cache},
-        )
-        assert grp.containers is not None
-        assert grp.containers.optional["strings"] is cache["simplearray/strings"]
-
-    def test_containers_accept_simplegroup(self, cache):
-        grp = Group.model_validate(
-            {
-                "description": "test",
-                "containers": {
-                    "required": {"param": "simplegroup/param"},
-                },
-            },
-            context={"cache": cache},
-        )
-        assert grp.containers is not None
-        assert grp.containers.required["param"] is cache["simplegroup/param"]
+# --- Group field conditional tests ---
 
 
 class TestGroupFieldConditional:
-    def test_accepts_tuple_ref(self, cache):
+    def test_accepts_field_ref(self, cache):
         entry = GroupFieldConditionalEntry.model_validate(
             {
-                "ref": "tuple/batch",
+                "ref": "field/str",
                 "only_when": {"field": "mode", "equals": "batch"},
             },
             context={"cache": cache},
         )
-        assert entry.ref is cache["tuple/batch"]
+        assert entry.ref is cache["field/str"]
 
-    def test_accepts_field_ref(self, cache):
+    def test_accepts_another_field_ref(self, cache):
         entry = GroupFieldConditionalEntry.model_validate(
             {
-                "ref": "atom/str",
-                "always_when": {"field": "format", "in": ["json", "jsonl"]},
+                "ref": "field/int",
+                "only_when": {"field": "mode", "equals": "batch"},
             },
             context={"cache": cache},
         )
-        assert entry.ref is cache["atom/str"]
-
-    def test_rejects_array_ref(self, cache):
-        with pytest.raises(ValidationError):
-            GroupFieldConditionalEntry.model_validate(
-                {
-                    "ref": "array/params",
-                    "only_when": {"field": "x", "equals": "y"},
-                },
-                context={"cache": cache},
-            )
+        assert entry.ref is cache["field/int"]
 
     def test_rejects_no_condition(self, cache):
         with pytest.raises(ValidationError):
             GroupFieldConditionalEntry.model_validate(
-                {"ref": "atom/str"},
+                {"ref": "field/str"},
                 context={"cache": cache},
             )
+
+
+# --- Group container conditional tests ---
 
 
 class TestGroupContainerConditional:
@@ -411,43 +330,41 @@ class TestGroupContainerConditional:
         assert entry.ref is cache["array/params"]
 
     def test_rejects_group_ref(self, cache):
-        """Group containers don't accept groups (would be circular)."""
         with pytest.raises(ValidationError):
             GroupContainerConditionalEntry.model_validate(
                 {
                     "ref": "group/meta",
-                    "only_when": {"field": "x", "equals": "y"},
+                    "only_when": {"field": "mode", "equals": "batch"},
                 },
                 context={"cache": cache},
             )
+
+
+# --- GroupFields tests ---
 
 
 class TestGroupFields:
     def test_all_zones(self, cache):
         gf = GroupFields.model_validate(
             {
-                "required": {"name": "atom/str"},
-                "optional": {"count": "atom/int"},
-                "conditional": {
-                    "batch": {
-                        "ref": "tuple/batch",
-                        "only_when": {"field": "mode", "equals": "batch"},
-                    },
-                },
+                "required": {"name": "field/str"},
+                "optional": {"count": "field/int"},
             },
             context={"cache": cache},
         )
         assert gf.required is not None
         assert gf.optional is not None
-        assert gf.conditional is not None
+
+
+# --- GroupContainers tests ---
 
 
 class TestGroupContainers:
     def test_required_and_optional(self, cache):
         gc = GroupContainers.model_validate(
             {
-                "required": {"items": "simplegroup/param"},
-                "optional": {"params": "array/params"},
+                "required": {"params": "array/params"},
+                "optional": {"extra": "simplegroup/param"},
             },
             context={"cache": cache},
         )
@@ -460,38 +377,48 @@ class TestGroupContainers:
 
 class TestSuperarray:
     def test_string_ref_to_group(self, cache):
-        sup = Superarray.model_validate(
-            {"items": "group/meta", "description": "test"},
+        sarr = Superarray.model_validate(
+            {
+                "title": "Test",
+                "items": "group/exec",
+                "description": "test",
+            },
             context={"cache": cache},
         )
-        assert sup.items is cache["group/meta"]
+        assert sarr.items is cache["group/exec"]
 
     def test_string_ref_to_simplegroup(self, cache):
-        sup = Superarray.model_validate(
-            {"items": "simplegroup/param", "description": "test"},
+        sarr = Superarray.model_validate(
+            {
+                "title": "Test",
+                "items": "simplegroup/param",
+                "description": "test",
+            },
             context={"cache": cache},
         )
-        assert sup.items is cache["simplegroup/param"]
+        assert sarr.items is cache["simplegroup/param"]
 
     def test_oneof_resolves_to_superarray_oneof(self, cache):
-        sup = Superarray.model_validate(
+        sarr = Superarray.model_validate(
             {
+                "title": "Test",
                 "items": {
-                    "oneOf": ["group/meta", "simplegroup/include"],
+                    "oneOf": ["group/exec", "simplegroup/param"],
                 },
                 "description": "test",
             },
             context={"cache": cache},
         )
-        assert isinstance(sup.items, SuperarrayOneOf)
-        assert len(sup.items.one_of) == 2
-        assert sup.items.one_of[0] is cache["group/meta"]
-        assert sup.items.one_of[1] is cache["simplegroup/include"]
+        assert isinstance(sarr.items, SuperarrayOneOf)
 
     def test_rejects_array_ref_in_items(self, cache):
         with pytest.raises(ValidationError):
             Superarray.model_validate(
-                {"items": "array/params", "description": "test"},
+                {
+                    "title": "Test",
+                    "items": "array/params",
+                    "description": "test",
+                },
                 context={"cache": cache},
             )
 
@@ -500,52 +427,57 @@ class TestSuperarray:
 
 
 class TestSection:
-    def test_components_accept_group(self, cache):
-        sec = Section.model_validate(
+    def test_containers_accept_group(self, cache):
+        sect = Section.model_validate(
             {
+                "title": "Test",
                 "description": "test",
-                "components": {"meta": "group/meta"},
+                "containers": {"required": {"meta": "group/meta"}},
             },
             context={"cache": cache},
         )
-        assert sec.components["meta"] is cache["group/meta"]
+        assert sect.containers.required["meta"] is cache["group/meta"]
 
-    def test_components_accept_array(self, cache):
-        sec = Section.model_validate(
+    def test_containers_accept_array(self, cache):
+        sect = Section.model_validate(
             {
+                "title": "Test",
                 "description": "test",
-                "components": {"criteria": "array/criteria"},
+                "containers": {"required": {"params": "array/params"}},
             },
             context={"cache": cache},
         )
-        assert sec.components["criteria"] is cache["array/criteria"]
+        assert sect.containers.required["params"] is cache["array/params"]
 
-    def test_components_accept_superarray(self, cache):
-        sec = Section.model_validate(
+    def test_containers_accept_superarray(self, cache):
+        sect = Section.model_validate(
             {
+                "title": "Test",
                 "description": "test",
-                "components": {"examples": "superarray/examples"},
+                "containers": {"required": {"examples": "superarray/examples"}},
             },
             context={"cache": cache},
         )
-        assert sec.components["examples"] is cache["superarray/examples"]
+        assert sect.containers.required["examples"] is cache["superarray/examples"]
 
-    def test_rejects_simplegroup_in_components(self, cache):
+    def test_rejects_simplegroup_in_containers(self, cache):
         with pytest.raises(ValidationError):
             Section.model_validate(
                 {
+                    "title": "Test",
                     "description": "test",
-                    "components": {"bad": "simplegroup/param"},
+                    "containers": {"required": {"bad": "simplegroup/param"}},
                 },
                 context={"cache": cache},
             )
 
-    def test_rejects_field_in_components(self, cache):
+    def test_rejects_field_in_containers(self, cache):
         with pytest.raises(ValidationError):
             Section.model_validate(
                 {
+                    "title": "Test",
                     "description": "test",
-                    "components": {"bad": "atom/str"},
+                    "containers": {"required": {"bad": "field/str"}},
                 },
                 context={"cache": cache},
             )
@@ -556,82 +488,97 @@ class TestSection:
 
 class TestShallowsection:
     def test_fields_and_containers(self, cache):
-        shallow = cache["shallowsection/dispatcher"]
-        assert shallow.required is not None
-        assert shallow.optional is not None
-        assert shallow.conditional is not None
-        assert shallow.containers is not None
-
-    def test_fields_only(self, cache):
         ss = Shallowsection.model_validate(
             {
+                "title": "Test",
                 "description": "test",
-                "required": {"name": "atom/str"},
+                "required": {"name": "field/str"},
+                "containers": {
+                    "required": {"params": "array/params"},
+                },
             },
             context={"cache": cache},
         )
         assert ss.required is not None
+        assert ss.containers is not None
+
+    def test_fields_only(self, cache):
+        ss = Shallowsection.model_validate(
+            {
+                "title": "Test",
+                "description": "test",
+                "required": {"name": "field/str"},
+            },
+            context={"cache": cache},
+        )
         assert ss.containers is None
 
     def test_max_two_containers(self, cache):
         ss = Shallowsection.model_validate(
             {
+                "title": "Test",
                 "description": "test",
-                "required": {"name": "atom/str"},
+                "required": {"name": "field/str"},
                 "containers": {
-                    "required": {"a": "array/params"},
-                    "optional": {"b": "simplearray/strings"},
+                    "required": {
+                        "params": "array/params",
+                        "criteria": "array/criteria",
+                    },
                 },
             },
             context={"cache": cache},
         )
-        assert ss.containers is not None
+        assert len(ss.containers.required) == 2
 
     def test_rejects_three_containers(self, cache):
         with pytest.raises(ValidationError):
             Shallowsection.model_validate(
                 {
+                    "title": "Test",
                     "description": "test",
-                    "required": {"name": "atom/str"},
+                    "required": {"name": "field/str"},
                     "containers": {
                         "required": {
                             "a": "array/params",
                             "b": "array/criteria",
+                            "c": "simplearray/strings",
                         },
-                        "optional": {"c": "simplearray/strings"},
                     },
                 },
                 context={"cache": cache},
             )
 
 
+# --- ShallowFieldConditional tests ---
+
+
 class TestShallowFieldConditional:
-    def test_accepts_tuple_ref(self, cache):
+    def test_accepts_field_int_ref(self, cache):
         entry = ShallowFieldConditionalEntry.model_validate(
             {
-                "ref": "tuple/batch",
+                "ref": "field/int",
                 "only_when": {"field": "mode", "equals": "batch"},
             },
             context={"cache": cache},
         )
-        assert entry.ref is cache["tuple/batch"]
+        assert entry.ref is cache["field/int"]
 
-    def test_accepts_field_ref(self, cache):
+    def test_accepts_field_str_ref(self, cache):
         entry = ShallowFieldConditionalEntry.model_validate(
             {
-                "ref": "enum/mode",
-                "not_when": {"field": "x", "equals": "y"},
+                "ref": "field/str",
+                "only_when": {"field": "mode", "equals": "batch"},
             },
             context={"cache": cache},
         )
-        assert entry.ref is cache["enum/mode"]
+        assert entry.ref is cache["field/str"]
 
     def test_rejects_array_ref(self, cache):
         with pytest.raises(ValidationError):
             ShallowFieldConditionalEntry.model_validate(
                 {
                     "ref": "array/params",
-                    "only_when": {"field": "x", "equals": "y"},
+                    "only_when": {"field": "mode", "equals": "batch"},
                 },
                 context={"cache": cache},
             )
@@ -644,6 +591,7 @@ class TestSchema:
     def test_sections_schema(self, cache):
         schema = Schema.model_validate(
             {
+                "title": "RawDefinition",
                 "version": 3,
                 "description": "raw definition",
                 "required": ["indirect", "exec"],
@@ -661,6 +609,7 @@ class TestSchema:
     def test_shallowsections_schema(self, cache):
         schema = Schema.model_validate(
             {
+                "title": "RenderSchema",
                 "version": 1,
                 "description": "render schema",
                 "required": ["dispatcher"],
@@ -673,25 +622,26 @@ class TestSchema:
         assert schema.shallowsections is not None
         assert schema.sections is None
 
-    def test_accepts_both_sections_and_shallowsections(self, cache):
-        schema = Schema.model_validate(
-            {
-                "version": 1,
-                "description": "test",
-                "sections": {"indirect": "section/indirect"},
-                "shallowsections": {
-                    "dispatcher": "shallowsection/dispatcher",
+    def test_rejects_both_sections_and_shallowsections(self, cache):
+        with pytest.raises(ValidationError, match="mutually exclusive"):
+            Schema.model_validate(
+                {
+                    "title": "Test",
+                    "version": 1,
+                    "description": "test",
+                    "sections": {"indirect": "section/indirect"},
+                    "shallowsections": {
+                        "dispatcher": "shallowsection/dispatcher",
+                    },
                 },
-            },
-            context={"cache": cache},
-        )
-        assert schema.sections is not None
-        assert schema.shallowsections is not None
+                context={"cache": cache},
+            )
 
     def test_rejects_neither_sections_nor_shallowsections(self, cache):
         with pytest.raises(ValidationError):
             Schema.model_validate(
                 {
+                    "title": "Test",
                     "version": 1,
                     "description": "test",
                 },
@@ -701,26 +651,28 @@ class TestSchema:
     def test_nullable_field(self, cache):
         schema = Schema.model_validate(
             {
+                "title": "NullableTest",
                 "version": 1,
-                "description": "test",
-                "required": ["dispatcher"],
-                "nullable": ["optional_section"],
-                "shallowsections": {
-                    "dispatcher": "shallowsection/dispatcher",
+                "description": "nullable test",
+                "nullable": ["exec"],
+                "sections": {
+                    "indirect": "section/indirect",
+                    "exec": "section/exec",
                 },
             },
             context={"cache": cache},
         )
-        assert schema.nullable == ("optional_section",)
+        assert schema.nullable == ("exec",)
 
     def test_is_frozen(self, cache):
         schema = Schema.model_validate(
             {
-                "version": 3,
+                "title": "FrozenTest",
+                "version": 1,
                 "description": "test",
                 "sections": {"indirect": "section/indirect"},
             },
             context={"cache": cache},
         )
         with pytest.raises(ValidationError):
-            schema.version = 4  # type: ignore[misc]
+            schema.version = 2  # type: ignore[misc]

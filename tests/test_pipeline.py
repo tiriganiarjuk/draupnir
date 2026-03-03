@@ -18,10 +18,10 @@ from draupnir.functions.pure.exporter import export_all_schemas
 
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
-VERDANDI_ROOT = WORKSPACE_ROOT / "tools" / "verdandi"
-SCHEMA_OUTPUT_DIR = WORKSPACE_ROOT / "schemas"
+VERDANDI_ROOT = WORKSPACE_ROOT / "tools" / "verdandi" / "agent-builder" / "source"
+SCHEMA_OUTPUT_DIR = WORKSPACE_ROOT / "tools" / "verdandi" / "agent-builder" / "output"
 
-EXPECTED_SCHEMA_COUNT = 12
+EXPECTED_SCHEMA_COUNT = 13
 
 
 @pytest.fixture(scope="module")
@@ -49,7 +49,7 @@ class TestLoader:
         levels_found = {key.split("/")[0] for key in loaded_cache}
         expected = {
             "pattern", "enum", "atom", "element", "union",
-            "tuple", "simplearray", "simplegroup",
+            "tuple", "field", "simplearray", "simplegroup",
             "array", "group", "superarray",
             "section", "shallowsection", "schema",
         }
@@ -135,8 +135,8 @@ class TestPipelineUtils:
         assert schema_filename("schema/agent-raw-definition") == "agent-raw-definition.schema.json"
         assert schema_filename("schema/agent-universal-format") == "agent-universal-format.schema.json"
 
-    def test_resolve_paths_defaults(self):
-        verdandi, output = resolve_paths(None, None, WORKSPACE_ROOT)
+    def test_resolve_paths_with_project(self):
+        verdandi, output = resolve_paths(None, None, WORKSPACE_ROOT, "agent-builder")
         assert verdandi == VERDANDI_ROOT
         assert output == SCHEMA_OUTPUT_DIR
 

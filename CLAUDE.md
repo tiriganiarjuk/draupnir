@@ -152,6 +152,16 @@ any dict."
 
 This will be a long coding session with frequent compaction. After each compaction, you will lose the reasoning behind decisions. These reminders tell you WHERE YOU ARE and WHAT NOT TO DEVIATE FROM.
 
+### After Schema Regeneration
+
+When draupnir regenerates schemas (`uv run draupnir --all`), nornir must be redeployed to embed the updated schemas:
+
+```bash
+cd /Users/johnny/.ai/spaces/bragi/tools/nornir && ./deploy_gates.py
+```
+
+Do NOT use bare `cargo build` — it skips gate module deployment (maturin builds, `.so` extraction, symlink creation, verification).
+
 ### After ANY compaction, ask yourself:
 
 1. **What phase am I in?** Check the gated plan (DRAUPNIR_REDESIGN.md §11). Find the last completed gate. That's where you are.

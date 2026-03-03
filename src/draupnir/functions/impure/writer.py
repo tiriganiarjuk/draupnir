@@ -6,11 +6,8 @@ this file writes).
 """
 
 import importlib.util
-import json
 from collections.abc import Callable
 from pathlib import Path
-
-from pydantic import BaseModel
 
 from draupnir.structures.schema_output import SchemaDocument
 
@@ -24,42 +21,6 @@ def write_schema(document: SchemaDocument, path: Path) -> Path:
     """Write a SchemaDocument as JSON to a file. Returns the path written."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(serialize_schema(document) + "\n")
-    return path
-
-
-def serialize_fragment(
-    built: BaseModel,
-    schema_id: str,
-    defs: dict[str, BaseModel] | None,
-) -> str:
-    """Serialize a schema fragment to formatted JSON string.
-
-    Merges $schema/$id metadata with the built model's fields.
-    Dict usage is at the serialization boundary — exit boundary.
-    """
-    data = built.model_dump(by_alias=True, exclude_none=True)
-    result = {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": schema_id,
-        **data,
-    }
-    if defs:
-        result["$defs"] = {
-            key: defn.model_dump(by_alias=True, exclude_none=True)
-            for key, defn in defs.items()
-        }
-    return json.dumps(result, indent=2)
-
-
-def write_fragment(
-    built: BaseModel,
-    defs: dict[str, BaseModel] | None,
-    schema_id: str,
-    path: Path,
-) -> Path:
-    """Write a schema fragment as JSON to a file. Returns the path written."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(serialize_fragment(built, schema_id, defs) + "\n")
     return path
 
 

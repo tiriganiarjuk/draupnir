@@ -18,7 +18,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, model_validator
 
-from draupnir.functions.pure.pydantic_validators import ref_from_cache
+from draupnir.functions.impure.pydantic_validators import ref_from_cache
 from draupnir.structures.conditionals import ConditionalWhen
 from draupnir.structures.field import ConstraintRule, SemanticBlock
 from draupnir.structures.fields import (
@@ -57,6 +57,7 @@ class VerdandiField(BaseModel):
 
     title: str
     type: FieldTypeRef
+    min_length: int | None = None
     description: str
     semantic: SemanticBlock | None = None
     constraint: tuple[ConstraintRule, ...] | None = None

@@ -11,7 +11,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict
 
-from draupnir.functions.pure.pydantic_validators import ref_from_cache
+from draupnir.functions.impure.pydantic_validators import ref_from_cache
 
 
 class Pattern(BaseModel):
@@ -36,6 +36,7 @@ class Atom(BaseModel):
     type: Literal["string", "integer", "boolean"]
     pattern: PatternRef | None = None
     excludes: tuple[PatternRef, ...] | None = None
+    min_length: int | None = None
     description: str
 
 

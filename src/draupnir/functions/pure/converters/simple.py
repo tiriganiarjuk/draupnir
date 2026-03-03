@@ -75,6 +75,8 @@ def build_verdandi_field(
             updates["min_length"] = override
         if field.const is not None:
             updates["const"] = field.const
+        if field.default is not None:
+            updates["default"] = field.default
     if isinstance(inner, (SchemaField, SchemaArray)):
         if field.semantic:
             updates["x_semantic"] = convert_semantic(field.semantic)

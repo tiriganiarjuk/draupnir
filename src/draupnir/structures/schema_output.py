@@ -212,6 +212,7 @@ class SchemaRef(BaseModel):
     title: str | None = None
     description: str | None = None
     const: str | None = None
+    default: str | int | bool | None = None
     min_length: int | None = Field(default=None, alias="minLength")
     x_semantic: SchemaSemanticExt | None = Field(
         default=None,

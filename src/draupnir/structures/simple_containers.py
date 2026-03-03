@@ -57,6 +57,7 @@ class VerdandiField(BaseModel):
 
     title: str
     type: FieldTypeRef
+    const: str | None = None
     min_length: int | None = None
     description: str
     semantic: SemanticBlock | None = None

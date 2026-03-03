@@ -3,10 +3,12 @@
 import pytest
 from pydantic import BaseModel
 
-from draupnir.functions.pure.exporter import (
-    count_refs,
+from draupnir.functions.impure.exporter import (
     export_all_schemas,
     export_schema,
+)
+from draupnir.functions.pure.tree_walk import (
+    count_refs,
     iter_child_models,
     reverse_cache_index,
     shared_keys,

@@ -117,13 +117,17 @@ def build_verdandi_field_refs(
     if isinstance(inner, SchemaRef):
         return SchemaRef(
             ref=inner.ref, title=field.title, description=combined,
+            const=field.const,
             min_length=override, x_semantic=semantic, x_constraint=constraint,
         )
     updates: dict[str, str | int | SchemaSemanticExt | SchemaConstraintBlock] = {
         "title": field.title, "description": combined,
     }
-    if isinstance(inner, SchemaField) and override is not None:
-        updates["min_length"] = override
+    if isinstance(inner, SchemaField):
+        if override is not None:
+            updates["min_length"] = override
+        if field.const is not None:
+            updates["const"] = field.const
     if isinstance(inner, (SchemaField, SchemaArray)):
         if semantic:
             updates["x_semantic"] = semantic

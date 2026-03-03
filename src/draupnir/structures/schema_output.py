@@ -211,6 +211,7 @@ class SchemaRef(BaseModel):
     ref: str = Field(alias="$ref")
     title: str | None = None
     description: str | None = None
+    const: str | None = None
     min_length: int | None = Field(default=None, alias="minLength")
     x_semantic: SchemaSemanticExt | None = Field(
         default=None,

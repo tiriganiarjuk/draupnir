@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from draupnir.functions.impure.loader import load_all_levels
 from draupnir.functions.impure.pipeline import resolve_paths, schema_filename
 from draupnir.functions.impure.writer import serialize_schema
-from draupnir.functions.pure.exporter import export_all_schemas
+from draupnir.functions.impure.exporter import export_all_schemas
 
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[3]

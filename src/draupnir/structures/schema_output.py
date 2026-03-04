@@ -194,6 +194,17 @@ class SchemaConstraintBlock(BaseModel):
     constraints: tuple[SchemaConstraintEntry, ...]
 
 
+class FieldMeta(BaseModel):
+    """Computed metadata for a VerdandiField during schema building."""
+
+    model_config = ConfigDict(frozen=True)
+
+    description: str
+    min_length: int | None = None
+    semantic: SchemaSemanticExt | None = None
+    constraint: SchemaConstraintBlock | None = None
+
+
 # --- Schema $ref ---
 
 
@@ -350,26 +361,6 @@ class SchemaTupleArray(BaseModel):
 SchemaObject.model_rebuild()
 
 
-# --- Nullable ---
-
-
-class SchemaNullType(BaseModel):
-    """JSON Schema null type: {"type": "null"}."""
-
-    model_config = ConfigDict(frozen=True)
-
-    type: str = "null"
-
-
-class SchemaNullableObject(BaseModel):
-    """oneOf wrapper for nullable groups: [{...}, {type: null}]."""
-
-    model_config = ConfigDict(frozen=True, populate_by_name=True)
-
-    one_of: tuple[SchemaObject, SchemaNullType] = Field(alias="oneOf")
-    description: str | None = None
-
-
 # --- Root documents ---
 
 
@@ -385,7 +376,7 @@ class SchemaDocument(BaseModel):
     type: str = "object"
     required: tuple[str, ...] | None = None
     properties: dict[
-        str, SchemaObject | SchemaNullableObject | SchemaRef,
+        str, SchemaObject | SchemaRef,
     ] = Field(default_factory=dict)
     additional_properties: bool | None = Field(
         default=None,

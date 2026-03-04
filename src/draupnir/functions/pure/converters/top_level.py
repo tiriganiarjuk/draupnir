@@ -73,11 +73,16 @@ def build_section(
     properties, required_keys = collect_required_optional(
         section.containers.required, section.containers.optional, build_fn,
     )
+    cond_props, conditionals = collect_conditional(
+        section.containers.conditional, build_fn,
+    )
+    properties.update(cond_props)
     return SchemaObject(
         title=section.title,
         properties=properties,
         required=tuple(required_keys) if required_keys else None,
         additional_properties=False,
+        all_of=tuple(conditionals) if conditionals else None,
         description=section.description,
     )
 

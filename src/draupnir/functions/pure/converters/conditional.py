@@ -18,6 +18,8 @@ from draupnir.structures.schema_output import (
 
 def build_if_condition(when: ConditionalWhen) -> SchemaCondition:
     """Build the if-clause from a ConditionalWhen."""
+    if when.exists:
+        return SchemaCondition(required=(when.field,))
     if when.equals is not None:
         constraint: SchemaConst | SchemaEnumConstraint = SchemaConst(const=when.equals)
     else:
@@ -27,7 +29,7 @@ def build_if_condition(when: ConditionalWhen) -> SchemaCondition:
 
 def is_cross_section(when: ConditionalWhen | None) -> bool:
     """Check if a conditional references a cross-section field path."""
-    return when is not None and "." in when.field
+    return when is not None and when.field.startswith(".")
 
 
 def build_only_when(field_name: str, when: ConditionalWhen) -> SchemaConditional:

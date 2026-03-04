@@ -13,7 +13,10 @@ from pydantic import BaseModel
 
 from draupnir.functions.pure.converters.defs import (
     build_simplearray_refs, build_simplegroup_refs, build_tuple_refs,
-    build_union_refs, build_verdandi_field_refs,
+    build_union_refs,
+)
+from draupnir.functions.pure.converters.field_meta import (
+    build_verdandi_field_refs,
 )
 from draupnir.functions.pure.converters.field import build_field
 from draupnir.functions.pure.converters.top_level import (

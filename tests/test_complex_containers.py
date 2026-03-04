@@ -594,17 +594,18 @@ class TestSchema:
                 "title": "RawDefinition",
                 "version": 3,
                 "description": "raw definition",
-                "required": ["indirect", "exec"],
                 "sections": {
-                    "indirect": "section/indirect",
-                    "exec": "section/exec",
+                    "required": {
+                        "indirect": "section/indirect",
+                        "exec": "section/exec",
+                    },
                 },
             },
             context={"cache": cache},
         )
         assert schema.sections is not None
         assert schema.shallowsections is None
-        assert schema.sections["indirect"] is cache["section/indirect"]
+        assert schema.sections.required["indirect"] is cache["section/indirect"]
 
     def test_shallowsections_schema(self, cache):
         schema = Schema.model_validate(
@@ -612,9 +613,10 @@ class TestSchema:
                 "title": "RenderSchema",
                 "version": 1,
                 "description": "render schema",
-                "required": ["dispatcher"],
                 "shallowsections": {
-                    "dispatcher": "shallowsection/dispatcher",
+                    "required": {
+                        "dispatcher": "shallowsection/dispatcher",
+                    },
                 },
             },
             context={"cache": cache},
@@ -629,9 +631,13 @@ class TestSchema:
                     "title": "Test",
                     "version": 1,
                     "description": "test",
-                    "sections": {"indirect": "section/indirect"},
+                    "sections": {
+                        "required": {"indirect": "section/indirect"},
+                    },
                     "shallowsections": {
-                        "dispatcher": "shallowsection/dispatcher",
+                        "required": {
+                            "dispatcher": "shallowsection/dispatcher",
+                        },
                     },
                 },
                 context={"cache": cache},
@@ -648,21 +654,22 @@ class TestSchema:
                 context={"cache": cache},
             )
 
-    def test_nullable_field(self, cache):
+    def test_optional_section(self, cache):
         schema = Schema.model_validate(
             {
-                "title": "NullableTest",
+                "title": "OptionalTest",
                 "version": 1,
-                "description": "nullable test",
-                "nullable": ["exec"],
+                "description": "optional test",
                 "sections": {
-                    "indirect": "section/indirect",
-                    "exec": "section/exec",
+                    "required": {"indirect": "section/indirect"},
+                    "optional": {"exec": "section/exec"},
                 },
             },
             context={"cache": cache},
         )
-        assert schema.nullable == ("exec",)
+        assert schema.sections.required is not None
+        assert schema.sections.optional is not None
+        assert "exec" in schema.sections.optional
 
     def test_is_frozen(self, cache):
         schema = Schema.model_validate(
@@ -670,7 +677,9 @@ class TestSchema:
                 "title": "FrozenTest",
                 "version": 1,
                 "description": "test",
-                "sections": {"indirect": "section/indirect"},
+                "sections": {
+                    "required": {"indirect": "section/indirect"},
+                },
             },
             context={"cache": cache},
         )

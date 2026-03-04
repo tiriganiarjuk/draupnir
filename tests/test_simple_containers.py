@@ -120,11 +120,44 @@ class TestConditionalWhen:
     def test_dotted_field_path(self):
         cw = ConditionalWhen.model_validate(
             {
-                "field": "indirect.dispatch.dispatch_input_delivery",
+                "field": ".indirect.dispatch.dispatch_input_delivery",
                 "equals": "file",
             }
         )
-        assert "." in cw.field
+        assert cw.field.startswith(".")
+
+    def test_exists_true(self):
+        cw = ConditionalWhen.model_validate(
+            {"field": "enforcement_output_tool", "exists": True}
+        )
+        assert cw.exists is True
+        assert cw.equals is None
+        assert cw.in_ is None
+
+    def test_exists_cross_section(self):
+        cw = ConditionalWhen.model_validate(
+            {"field": ".task.processing.output_file_format", "exists": True}
+        )
+        assert cw.exists is True
+        assert cw.field.startswith(".")
+
+    def test_rejects_exists_false(self):
+        with pytest.raises(ValidationError):
+            ConditionalWhen.model_validate(
+                {"field": "x", "exists": False}
+            )
+
+    def test_rejects_exists_with_equals(self):
+        with pytest.raises(ValidationError):
+            ConditionalWhen.model_validate(
+                {"field": "x", "exists": True, "equals": "a"}
+            )
+
+    def test_rejects_exists_with_in(self):
+        with pytest.raises(ValidationError):
+            ConditionalWhen.model_validate(
+                {"field": "x", "exists": True, "in": ["a"]}
+            )
 
 
 class TestTuple:

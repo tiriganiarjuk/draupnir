@@ -116,10 +116,10 @@ All source files under `tools/draupnir/src/draupnir/`.
 | `structures/fields.py` | Tier 1 field models and ref type aliases | `Pattern` (regex + description), `Atom` (type + pattern + excludes), `Enum` (values), `Element` (inherits atom/enum + format), `Union_` (oneOf composition). Ref aliases: `PatternRef`, `AtomOrEnumRef`, `UnionMemberRef`, `FieldRef` |
 | `structures/simple_containers.py` | Tier 2 simple container models | `Tuple_` (fixed-length typed sequence), `Simplearray` (variable-length single-type array), `Simplegroup` (flat object with required/optional/conditional zones), `SimplegroupConditionalEntry`. Ref alias: `SimplegroupItemRef` |
 | `structures/complex_containers.py` | Tier 3 complex container models | `Array` (array of simplegroups), `ArrayOneOf` (oneOf for array items), `Group` (object with fields + containers sections), `GroupFields`, `GroupContainers`, `GroupFieldConditionalEntry`, `GroupContainerConditionalEntry`, `Superarray` (array of groups/simplegroups), `SuperarrayOneOf`. Ref aliases: `SimplegroupRef`, `GroupContainerRef`, `GroupFieldConditionalRef`, `GroupOrSimplegroupRef` |
-| `structures/conditionals.py` | Conditional presence predicates | `ConditionalWhen` (field + equals/in predicate for only_when/always_when/not_when blocks) |
-| `structures/top_level.py` | Tier 4 top-level and root models | `Section` (components are complex containers only), `Shallowsection` (fields + limited containers, max 2), `ShallowContainers`, `ShallowFieldConditionalEntry`, `Schema` (root: references sections and/or shallowsections, nullable support). Ref aliases: `ComplexContainerRef`, `ShallowContainerRef`, `ShallowFieldConditionalRef`, `SectionOnlyRef`, `ShallowsectionOnlyRef` |
+| `structures/conditionals.py` | Conditional presence predicates | `ConditionalWhen` (field + equals/in/exists predicate for only_when/always_when/not_when blocks) |
+| `structures/top_level.py` | Tier 4 top-level and root models | `Section` (components are complex containers only), `Shallowsection` (fields + limited containers, max 2), `ShallowContainers`, `ShallowFieldConditionalEntry`, `Schema` (root: uses `SchemaSections`/`SchemaShallowsections` zone containers with required/optional/conditional zones), `SchemaSections`, `SchemaShallowsections`, `SchemaSectionConditionalEntry`, `SchemaShallowConditionalEntry`, `SectionContainerConditionalEntry`. Ref aliases: `ComplexContainerRef`, `ShallowContainerRef`, `ShallowFieldConditionalRef`, `SectionOnlyRef`, `ShallowsectionOnlyRef` |
 | `structures/levels.py` | Level enum -- load order IS declaration order | `Level` enum: pattern, enum, atom, element, union, tuple, simplearray, simplegroup, array, group, superarray, section, shallowsection, schema. Each member's value is the Pydantic model class for that level. |
-| `structures/schema_output.py` | JSON Schema output models | `SchemaDocument` (root), `SchemaObject` (groups/sections), `SchemaField` (leaf properties), `SchemaArray`, `SchemaTupleArray`, `SchemaOneOfField` (union fields), `SchemaOneOf` (polymorphic array items), `SchemaRef` ($ref pointer), `SchemaConditional`/`SchemaCondition` (if/then/else), `SchemaRootConditional`/`SchemaNestedPath` (cross-section conditionals), `SchemaNullableObject`/`SchemaNullType` (nullable wrapping), `SchemaConst`, `SchemaEnumConstraint`, `ValidationConstraint`, `SchemaNotBlock`, `SchemaSemanticExt`, `SchemaConstraintBlock` |
+| `structures/schema_output.py` | JSON Schema output models | `SchemaDocument` (root), `SchemaObject` (groups/sections), `SchemaField` (leaf properties), `SchemaArray`, `SchemaTupleArray`, `SchemaOneOfField` (union fields), `SchemaOneOf` (polymorphic array items), `SchemaRef` ($ref pointer), `SchemaConditional`/`SchemaCondition` (if/then/else), `SchemaRootConditional`/`SchemaNestedPath` (cross-section conditionals), `SchemaConst`, `SchemaEnumConstraint`, `ValidationConstraint`, `SchemaNotBlock`, `SchemaSemanticExt`, `SchemaConstraintBlock` |
 
 ### functions/pure/ -- No IO, No Side Effects
 
@@ -128,7 +128,9 @@ All source files under `tools/draupnir/src/draupnir/`.
 | `functions/pure/pydantic_validators.py` | Shared ref conversion for Verdandi YAML references | `ref_from_cache(value, info)` -- BeforeValidator that converts string refs like `"atom/kebab_string"` to cached Pydantic models during model_validate(). Pass-through for models handles test cases. |
 | `functions/pure/build_fields.py` | Field-level and simple container builders (always inlined, never $defs candidates) | `build_atom()`, `build_enum()`, `build_element()`, `build_union()`, `build_field()` (dispatch by type), `build_tuple()`, `build_simplearray()`, `build_simple()` (dispatch for fields + simple containers), `build_simplegroup()`, `build_if_condition()`, `build_conditional_entry()` |
 | `functions/pure/build_containers.py` | Complex container and top-level builders with $defs tracking | `build_or_ref()` (build inline or emit $ref for shared models), `build_model()` (dispatch any Verdandi model), `build_array()`, `build_superarray()`, `build_group_properties()`, `build_group()`, `build_section()`, `build_shallowsection()`, `defs_key()` (cache key to $defs key conversion) |
-| `functions/pure/exporter.py` | Tree walk, shared node detection, SchemaDocument assembly | `reverse_cache_index()` (id(model) -> cache_key mapping), `iter_child_models()` (generic Pydantic field iteration), `count_refs()` (iterative tree walk counting occurrences for $defs detection), `shared_keys()` (frozenset of keys appearing 2+ times), `build_schema_properties()` (top-level properties with nullable wrapping), `export_schema()` (complete SchemaDocument assembly), `export_all_schemas()` (batch export) |
+| `functions/pure/exporter.py` | SchemaDocument assembly and export | `build_schema_properties()` (top-level properties from zone primitives), `collect_schema_zone_conditionals()`, `merge_all_conditionals()`, `export_schema()` (complete SchemaDocument assembly), `export_fragment()`, `export_all_schemas()` (batch export) |
+| `functions/pure/tree_walk.py` | Tree walk and shared node detection | `reverse_cache_index()` (id(model) -> cache_key mapping), `iter_child_models()` (generic Pydantic field iteration), `count_refs()` (iterative tree walk counting occurrences for $defs detection), `shared_keys()` (frozenset of keys appearing 2+ times), `wrap_array_as_object()` |
+| `functions/pure/collect_cross_section.py` | Cross-section conditional collectors | `collect_section_conditionals()`, `iter_schema_sections()`, `collect_schema_conditionals()` |
 
 ### functions/impure/ -- File IO (exactly 2 impure files + orchestrator)
 
@@ -185,17 +187,18 @@ Seven documentation files were consulted during reconciliation:
 
 Per `documentation/pipeline/CRITICAL_DECISIONS.md`: 12 of 13 next-step items completed. Item 12 ("Update existing agent definition JSON files for new schema structure") remains open. Item 13 (resolver/generator integration) is in progress with the full nornir-gated pipeline.
 
-### ACTIVE REFACTOR: Schema Zone Unification (branch: `refactor/schema-zone-unification`)
+### COMPLETED REFACTOR: Schema Zone Unification
 
-Three changes in progress — see `tools/verdandi/PLAN_SCHEMA_ZONE_UNIFICATION.md`:
-1. **Schema model gets required/optional/conditional zones** — `Schema` model loses `required` and `nullable` fields, gains `SchemaSections`/`SchemaShallowsections` zone containers. Nullable wrapping removed from exporter.
-2. **Presence-based conditionals** — `ConditionalWhen` gains `exists` field. `build_if_condition` and `build_if_nested` emit `required` in `if` clause instead of `const`/`enum`.
-3. **Leading-dot cross-section paths** — `is_cross_section` changes from `"." in field` to `field.startswith(".")`. `build_if_nested` strips leading dot.
+Three changes completed (historical reference: `tools/verdandi/PLAN_SCHEMA_ZONE_UNIFICATION.md`):
+1. **Schema model gets required/optional/conditional zones** — `Schema` model lost `required` and `nullable` fields, gained `SchemaSections`/`SchemaShallowsections` zone containers. Nullable wrapping removed from exporter.
+2. **Presence-based conditionals** — `ConditionalWhen` gained `exists` field. `build_if_condition` and `build_if_nested` emit `required` in `if` clause instead of `const`/`enum`.
+3. **Leading-dot cross-section paths** — `is_cross_section` changed from `"." in field` to `field.startswith(".")`. `build_if_nested` strips leading dot.
 
-Key draupnir files that change:
+Key draupnir files changed:
 - `structures/top_level.py` — Schema model, new zone container types, new conditional entry types
-- `structures/conditionals.py` — ConditionalWhen gains `exists` predicate
+- `structures/conditionals.py` — ConditionalWhen gained `exists` predicate
 - `structures/schema_output.py` — SchemaNullableObject/SchemaNullType removed
 - `functions/pure/converters/conditional.py` — `build_if_condition` handles `exists`
-- `functions/pure/build_cross_section.py` — `build_if_nested` handles `exists`, `is_cross_section` updated, `collect_schema_conditionals` extended
-- `functions/impure/exporter.py` — `build_schema_properties` uses zone primitives, nullable wrapping removed
+- `functions/pure/build_cross_section.py` — `build_if_nested` handles `exists`, `is_cross_section` updated
+- `functions/pure/collect_cross_section.py` — cross-section conditional collectors, extracted from build_cross_section.py
+- `functions/pure/exporter.py` — `build_schema_properties` uses zone primitives, nullable wrapping removed

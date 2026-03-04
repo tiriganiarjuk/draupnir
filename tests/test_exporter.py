@@ -20,13 +20,11 @@ from draupnir.structures.complex_containers import (
     GroupFields,
 )
 from draupnir.structures.fields import Atom, Pattern
-from draupnir.structures.schema_output import (
-    SchemaDocument,
-    SchemaNullableObject,
-)
+from draupnir.structures.schema_output import SchemaDocument, SchemaObject
 from draupnir.structures.simple_containers import Simplegroup, VerdandiField
 from draupnir.structures.top_level import (
     Schema,
+    SchemaShallowsections,
     Shallowsection,
     ShallowContainers,
 )
@@ -175,8 +173,9 @@ class TestExportSchema:
             title="Test",
             version=1,
             description="test schema",
-            required=("name",),
-            shallowsections={"identity": shallow},
+            shallowsections=SchemaShallowsections(
+                required={"identity": shallow},
+            ),
         )
         cache: dict[str, BaseModel] = {
             "field/name": field_string,
@@ -189,27 +188,31 @@ class TestExportSchema:
         assert result.schema_id == "test.schema.json"
         assert result.title == "Test"
         assert "identity" in result.properties
+        assert result.required == ("identity",)
 
-    def test_nullable_wrapping(self, field_string):
+    def test_optional_section_not_in_required(self, field_string):
         shallow = Shallowsection(
             title="Section",
             required={"name": field_string},
             description="section",
         )
         schema = Schema(
-            title="NullableTest",
+            title="OptionalTest",
             version=1,
-            description="nullable test",
-            nullable=("section",),
-            shallowsections={"section": shallow},
+            description="optional test",
+            shallowsections=SchemaShallowsections(
+                optional={"section": shallow},
+            ),
         )
         cache: dict[str, BaseModel] = {
             "field/name": field_string,
-            "shallowsection/identity": shallow,
-            "schema/nullable": schema,
+            "shallowsection/section": shallow,
+            "schema/optional": schema,
         }
-        result = export_schema(schema, "schema/nullable", cache)
-        assert isinstance(result.properties["section"], SchemaNullableObject)
+        result = export_schema(schema, "schema/optional", cache)
+        assert "section" in result.properties
+        assert result.required is None
+        assert isinstance(result.properties["section"], SchemaObject)
 
 
 # --- Test export_all_schemas ---
@@ -226,7 +229,9 @@ class TestExportAllSchemas:
             title="Test",
             version=1,
             description="test",
-            shallowsections={"identity": shallow},
+            shallowsections=SchemaShallowsections(
+                required={"identity": shallow},
+            ),
         )
         cache: dict[str, BaseModel] = {
             "field/name": field_string,

@@ -2,7 +2,7 @@
 
 ConditionalWhen models the predicate in only_when/always_when/not_when
 blocks. Each predicate targets a field path and matches either a single
-value (equals) or multiple values (in).
+value (equals), multiple values (in), or property presence (exists).
 
 ConditionalEntry is the structural type shared by all conditional entry
 models across tiers (SimplegroupConditionalEntry, GroupFieldConditionalEntry,
@@ -22,13 +22,20 @@ class ConditionalWhen(BaseModel):
     field: str
     equals: str | int | bool | None = None
     in_: tuple[str | int | bool, ...] | None = Field(None, alias="in")
+    exists: bool | None = None
 
     @model_validator(mode="after")
     def exactly_one_predicate(self) -> "ConditionalWhen":
-        has_equals = self.equals is not None
-        has_in = self.in_ is not None
-        if has_equals == has_in:
-            msg = "exactly one of 'equals' or 'in' must be set"
+        count = sum([
+            self.equals is not None,
+            self.in_ is not None,
+            self.exists is not None,
+        ])
+        if count != 1:
+            msg = "exactly one of 'equals', 'in', or 'exists' must be set"
+            raise ValueError(msg)
+        if self.exists is not None and self.exists is not True:
+            msg = "'exists' must be true (use not_when for the inverse)"
             raise ValueError(msg)
         return self
 

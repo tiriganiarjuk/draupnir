@@ -38,13 +38,37 @@ ComplexContainerRef = Annotated[
 ]
 
 
+class SectionContainerConditionalEntry(BaseModel):
+    """Conditional container entry for section container zones."""
+
+    model_config = ConfigDict(frozen=True)
+
+    ref: ComplexContainerRef
+    only_when: ConditionalWhen | None = None
+    always_when: ConditionalWhen | None = None
+    not_when: ConditionalWhen | None = None
+
+    @model_validator(mode="after")
+    def exactly_one_condition(self) -> "SectionContainerConditionalEntry":
+        conditions = (
+            self.only_when is not None,
+            self.always_when is not None,
+            self.not_when is not None,
+        )
+        if sum(conditions) != 1:
+            msg = "exactly one of only_when/always_when/not_when required"
+            raise ValueError(msg)
+        return self
+
+
 class SectionContainers(BaseModel):
-    """Container zones for a section — required/optional."""
+    """Container zones for a section — required/optional/conditional."""
 
     model_config = ConfigDict(frozen=True)
 
     required: dict[str, ComplexContainerRef] | None = None
     optional: dict[str, ComplexContainerRef] | None = None
+    conditional: dict[str, SectionContainerConditionalEntry] | None = None
 
 
 class Section(BaseModel):
@@ -135,18 +159,82 @@ ShallowsectionOnlyRef = Annotated[
 ]
 
 
+class SchemaSectionConditionalEntry(BaseModel):
+    """Conditional section entry for schema section zones."""
+
+    model_config = ConfigDict(frozen=True)
+
+    ref: SectionOnlyRef
+    only_when: ConditionalWhen | None = None
+    always_when: ConditionalWhen | None = None
+    not_when: ConditionalWhen | None = None
+
+    @model_validator(mode="after")
+    def exactly_one_condition(self) -> "SchemaSectionConditionalEntry":
+        conditions = (
+            self.only_when is not None,
+            self.always_when is not None,
+            self.not_when is not None,
+        )
+        if sum(conditions) != 1:
+            msg = "exactly one of only_when/always_when/not_when required"
+            raise ValueError(msg)
+        return self
+
+
+class SchemaShallowConditionalEntry(BaseModel):
+    """Conditional shallowsection entry for schema shallowsection zones."""
+
+    model_config = ConfigDict(frozen=True)
+
+    ref: ShallowsectionOnlyRef
+    only_when: ConditionalWhen | None = None
+    always_when: ConditionalWhen | None = None
+    not_when: ConditionalWhen | None = None
+
+    @model_validator(mode="after")
+    def exactly_one_condition(self) -> "SchemaShallowConditionalEntry":
+        conditions = (
+            self.only_when is not None,
+            self.always_when is not None,
+            self.not_when is not None,
+        )
+        if sum(conditions) != 1:
+            msg = "exactly one of only_when/always_when/not_when required"
+            raise ValueError(msg)
+        return self
+
+
+class SchemaSections(BaseModel):
+    """Zone container for schema sections: key."""
+
+    model_config = ConfigDict(frozen=True)
+
+    required: dict[str, SectionOnlyRef] | None = None
+    optional: dict[str, SectionOnlyRef] | None = None
+    conditional: dict[str, SchemaSectionConditionalEntry] | None = None
+
+
+class SchemaShallowsections(BaseModel):
+    """Zone container for schema shallowsections: key."""
+
+    model_config = ConfigDict(frozen=True)
+
+    required: dict[str, ShallowsectionOnlyRef] | None = None
+    optional: dict[str, ShallowsectionOnlyRef] | None = None
+    conditional: dict[str, SchemaShallowConditionalEntry] | None = None
+
+
 class Schema(BaseModel):
-    """Root schema — references sections, shallowsections, or both."""
+    """Root schema — references sections or shallowsections via zones."""
 
     model_config = ConfigDict(frozen=True)
 
     title: str
     version: int
     description: str
-    required: tuple[str, ...] | None = None
-    nullable: tuple[str, ...] | None = None
-    sections: dict[str, SectionOnlyRef] | None = None
-    shallowsections: dict[str, ShallowsectionOnlyRef] | None = None
+    sections: SchemaSections | None = None
+    shallowsections: SchemaShallowsections | None = None
 
     @model_validator(mode="after")
     def exactly_one_section_type(self) -> "Schema":

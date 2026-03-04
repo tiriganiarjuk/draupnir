@@ -9,16 +9,16 @@ import importlib.util
 from collections.abc import Callable
 from pathlib import Path
 
-from draupnir.structures.schema_output import SchemaDocument
+from draupnir.structures.schema_output import FragmentDocument, SchemaDocument
 
 
-def serialize_schema(document: SchemaDocument) -> str:
-    """Serialize a SchemaDocument to formatted JSON string."""
+def serialize_schema(document: SchemaDocument | FragmentDocument) -> str:
+    """Serialize a schema document to formatted JSON string."""
     return document.model_dump_json(by_alias=True, exclude_none=True, indent=2)
 
 
-def write_schema(document: SchemaDocument, path: Path) -> Path:
-    """Write a SchemaDocument as JSON to a file. Returns the path written."""
+def write_schema(document: SchemaDocument | FragmentDocument, path: Path) -> Path:
+    """Write a schema document as JSON to a file. Returns the path written."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(serialize_schema(document) + "\n")
     return path

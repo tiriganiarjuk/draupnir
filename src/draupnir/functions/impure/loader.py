@@ -54,7 +54,7 @@ def try_load_file(
     try:
         load_file(cache_key, root, cache)
     except (yaml.YAMLError, ValueError, KeyError) as exc:
-        return f"{cache_key}: {exc!s:.80}"
+        return f"{cache_key}: {exc!s}"
     return None
 
 
@@ -82,4 +82,6 @@ def load_all_levels(
                     errors.append(error)
     if errors:
         sys.stderr.write(f"warning: {len(errors)} files failed to load\n")
+        for error in errors:
+            sys.stderr.write(f"  {error}\n")
     return cache

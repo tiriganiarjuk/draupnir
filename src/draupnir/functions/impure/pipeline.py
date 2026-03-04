@@ -18,7 +18,7 @@ from draupnir.functions.impure.writer import (
     write_sidecar,
 )
 from draupnir.functions.impure.exporter import export_all_schemas, export_fragment
-from draupnir.structures.schema_output import SchemaDocument
+from draupnir.structures.schema_output import FragmentDocument, SchemaDocument
 
 
 def resolve_paths(
@@ -110,7 +110,7 @@ def run_fragments(
             return 1
         schema_id = f"{output_name}.schema.json"
         built, defs = export_fragment(model, cache)
-        document = SchemaDocument(
+        document = FragmentDocument(
             schema_uri="https://json-schema.org/draft/2020-12/schema",
             schema_id=schema_id,
             title=built.title,

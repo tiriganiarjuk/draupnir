@@ -370,11 +370,11 @@ class SchemaNullableObject(BaseModel):
     description: str | None = None
 
 
-# --- Root document ---
+# --- Root documents ---
 
 
 class SchemaDocument(BaseModel):
-    """Complete JSON Schema document (root output)."""
+    """Full pipeline schema document — root properties are sections."""
 
     model_config = ConfigDict(frozen=True, populate_by_name=True)
 
@@ -385,7 +385,7 @@ class SchemaDocument(BaseModel):
     type: str = "object"
     required: tuple[str, ...] | None = None
     properties: dict[
-        str, SchemaObject | SchemaNullableObject | SchemaRef
+        str, SchemaObject | SchemaNullableObject | SchemaRef,
     ] = Field(default_factory=dict)
     additional_properties: bool | None = Field(
         default=None,
@@ -401,4 +401,32 @@ class SchemaDocument(BaseModel):
     all_of: tuple[SchemaRootConditional, ...] | None = Field(
         default=None,
         alias="allOf",
+    )
+
+
+class FragmentDocument(BaseModel):
+    """Include fragment schema — root properties are fields or arrays."""
+
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
+
+    schema_uri: str = Field(alias="$schema")
+    schema_id: str = Field(alias="$id")
+    title: str
+    description: str
+    type: str = "object"
+    required: tuple[str, ...] | None = None
+    properties: dict[
+        str,
+        "SchemaField | SchemaOneOfField | SchemaObject | SchemaArray | SchemaRef",
+    ] = Field(default_factory=dict)
+    additional_properties: bool | None = Field(
+        default=None,
+        alias="additionalProperties",
+    )
+    defs: dict[
+        str,
+        "SchemaObject | SchemaArray | SchemaTupleArray | SchemaField | SchemaOneOfField | SchemaRef",
+    ] | None = Field(
+        default=None,
+        alias="$defs",
     )

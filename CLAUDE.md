@@ -96,6 +96,16 @@ None of them felt uncertain while doing it.
 **Why it's wrong:** No leading underscore names. Period. The "private" convention is an OOP pattern for hiding implementation behind interfaces. In FP, every function is a composable public unit. If a function does one thing and is pure, there's no reason to hide it.
 **Recovery:** Remove the underscore. If the name collides, choose a better name.
 
+### Using nullable wrapping in schema export
+**Detection:** If you find yourself writing `SchemaNullableObject`, `SchemaNullType`, or wrapping sections in `oneOf: [schema, {type: null}]`...
+**Why it's wrong:** Nullable is removed. Investigation confirmed that generated Pydantic models collapse nullable and optional into `| None = None` (row 3). TOML has no null. Pipeline processors don't distinguish. The oneOf wrapping was dead weight.
+**Recovery:** Use `optional` zone instead. See `tools/verdandi/PLAN_SCHEMA_ZONE_UNIFICATION.md`.
+
+### Detecting cross-section conditionals by internal dots
+**Detection:** If you find yourself writing `"." in when.field` to detect cross-section conditionals...
+**Why it's wrong:** Cross-section paths now use a leading dot: `.indirect.dispatch.dispatch_mode`. The old heuristic (`"." in field`) is ambiguous at the schema root level where siblings are sections. The new detection is `when.field.startswith(".")`.
+**Recovery:** Use `startswith(".")` and strip the leading dot before splitting into path segments.
+
 ---
 
 ## MANDATORY: Run Guardrails Frequently

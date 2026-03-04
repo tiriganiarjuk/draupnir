@@ -184,3 +184,18 @@ Seven documentation files were consulted during reconciliation:
 ### Pipeline Status
 
 Per `documentation/pipeline/CRITICAL_DECISIONS.md`: 12 of 13 next-step items completed. Item 12 ("Update existing agent definition JSON files for new schema structure") remains open. Item 13 (resolver/generator integration) is in progress with the full nornir-gated pipeline.
+
+### ACTIVE REFACTOR: Schema Zone Unification (branch: `refactor/schema-zone-unification`)
+
+Three changes in progress — see `tools/verdandi/PLAN_SCHEMA_ZONE_UNIFICATION.md`:
+1. **Schema model gets required/optional/conditional zones** — `Schema` model loses `required` and `nullable` fields, gains `SchemaSections`/`SchemaShallowsections` zone containers. Nullable wrapping removed from exporter.
+2. **Presence-based conditionals** — `ConditionalWhen` gains `exists` field. `build_if_condition` and `build_if_nested` emit `required` in `if` clause instead of `const`/`enum`.
+3. **Leading-dot cross-section paths** — `is_cross_section` changes from `"." in field` to `field.startswith(".")`. `build_if_nested` strips leading dot.
+
+Key draupnir files that change:
+- `structures/top_level.py` — Schema model, new zone container types, new conditional entry types
+- `structures/conditionals.py` — ConditionalWhen gains `exists` predicate
+- `structures/schema_output.py` — SchemaNullableObject/SchemaNullType removed
+- `functions/pure/converters/conditional.py` — `build_if_condition` handles `exists`
+- `functions/pure/build_cross_section.py` — `build_if_nested` handles `exists`, `is_cross_section` updated, `collect_schema_conditionals` extended
+- `functions/impure/exporter.py` — `build_schema_properties` uses zone primitives, nullable wrapping removed

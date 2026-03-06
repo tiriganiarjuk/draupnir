@@ -4,7 +4,6 @@ version = "0.1.0"
 description = "Schema generator — walks composition trees from root schema definitions to produce JSON Schema"
 requires-python = ">=3.13"
 dependencies = [
-    "gleipnir",
     "pydantic>=2.0",
     "pyyaml>=6.0",
 ]
@@ -16,14 +15,6 @@ draupnir = "draupnir.cli:main"
 dev = [
     "pytest>=8.0",
     "jsonschema>=4.23",
-]
-
-[tool.uv.sources]
-gleipnir = { path = "../../../../gleipnir", editable = true }
-
-[project.optional-dependencies]
-dev = [
-    "gleipnir",
 ]
 
 [build-system]

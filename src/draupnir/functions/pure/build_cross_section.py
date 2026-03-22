@@ -49,11 +49,13 @@ def build_if_nested(when: ConditionalWhen) -> SchemaNestedPath:
         constraint: SchemaConst | SchemaEnumConstraint = SchemaConst(const=when.equals)
         leaf = SchemaNestedPath(
             properties=NestedPathProperties({field_name: constraint}),
+            required=(field_name,),
         )
     else:
         constraint = SchemaEnumConstraint(enum=when.in_)
         leaf = SchemaNestedPath(
             properties=NestedPathProperties({field_name: constraint}),
+            required=(field_name,),
         )
     return wrap_nested_path(path_segments, leaf)
 

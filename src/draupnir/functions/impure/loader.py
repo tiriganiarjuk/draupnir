@@ -69,11 +69,19 @@ def load_all_levels(
     higher levels validate. Skips levels whose directories don't exist.
     Returns the populated cache.
     """
+    if not root.is_dir():
+        sys.stderr.write(f"error: verdandi root does not exist: {root}\n")
+        return cache
+    level_dirs = [level for level in Level if (root / level.name).is_dir()]
+    if not level_dirs:
+        sys.stderr.write(
+            f"error: no level directories found in {root}\n"
+            f"  expected directories like pattern/, atom/, field/, etc.\n",
+        )
+        return cache
     errors: list[str] = []
-    for level in Level:
+    for level in level_dirs:
         level_dir = root / level.name
-        if not level_dir.is_dir():
-            continue
         for file_path in sorted(level_dir.glob("*.yaml")):
             cache_key = f"{level.name}/{file_path.stem}"
             if cache_key not in cache:

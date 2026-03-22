@@ -1,11 +1,9 @@
 """Field extension models: SemanticBlock, ConstraintRule.
 
 These are the sub-models carried by VerdandiField for optional semantic
-and constraint metadata. Defined separately to break the circular import
-between field-level and simple-container modules (VerdandiField needs
-Tuple_ from simple_containers, and simple_containers needs VerdandiField
-in its ref aliases — so VerdandiField lives in simple_containers.py
-while these support models live here).
+and constraint metadata. Defined separately because VerdandiField lives
+in simple_containers.py (containers need it in their ref aliases) and
+importing these sub-models from a separate module avoids circular imports.
 """
 
 from pydantic import BaseModel, ConfigDict, Field as PydanticField

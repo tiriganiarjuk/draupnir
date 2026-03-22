@@ -87,18 +87,25 @@ def build_section(
     )
 
 
-def build_shallowsection(
+def build_shallowsection_properties(
     shallowsection: Shallowsection,
     build_fn: Callable[[BaseModel], BaseModel],
-) -> SchemaObject:
-    """Shallowsection -> {type: object, fields + containers}."""
-    properties, required_keys = collect_required_optional(
-        shallowsection.required, shallowsection.optional, build_fn,
-    )
-    cond_props, conditionals = collect_conditional(
-        shallowsection.conditional, build_fn,
-    )
-    properties.update(cond_props)
+) -> tuple[dict[str, BaseModel], list[str], list[SchemaConditional]]:
+    """Extract properties, required keys, and conditionals from a shallowsection."""
+    properties: dict[str, BaseModel] = {}
+    required_keys: list[str] = []
+    conditionals: list[SchemaConditional] = []
+    if shallowsection.fields:
+        props, req = collect_required_optional(
+            shallowsection.fields.required, shallowsection.fields.optional, build_fn,
+        )
+        properties.update(props)
+        required_keys.extend(req)
+        cond_props, conds = collect_conditional(
+            shallowsection.fields.conditional, build_fn,
+        )
+        properties.update(cond_props)
+        conditionals.extend(conds)
     if shallowsection.containers:
         cont_props, cont_required = collect_required_optional(
             shallowsection.containers.required,
@@ -107,6 +114,17 @@ def build_shallowsection(
         )
         properties.update(cont_props)
         required_keys.extend(cont_required)
+    return properties, required_keys, conditionals
+
+
+def build_shallowsection(
+    shallowsection: Shallowsection,
+    build_fn: Callable[[BaseModel], BaseModel],
+) -> SchemaObject:
+    """Shallowsection -> {type: object, fields + containers}."""
+    properties, required_keys, conditionals = build_shallowsection_properties(
+        shallowsection, build_fn,
+    )
     return SchemaObject(
         title=shallowsection.title,
         properties=properties,

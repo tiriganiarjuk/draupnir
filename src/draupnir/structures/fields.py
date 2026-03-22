@@ -1,10 +1,14 @@
-"""Field-level Verdandi models: Pattern, Atom, Enum, Element, Union_.
+"""Field-level Verdandi models: Pattern, Atom, Enum, Element, Tuple_, Union_.
 
 These are the lowest composition levels. Each model is frozen and holds
 its children as actual models (not strings) via BeforeValidator conversion.
 
 Ref type aliases defined here (PatternRef, AtomOrEnumRef, UnionMemberRef,
 FieldRef) are imported by higher-level structure modules.
+
+Tuple_ lives here (not in simple_containers) because it is a type-tier
+model — fixed-length typed sequence, not a container. Unions may reference
+tuples, so Tuple_ must be defined before Union_ in the same module.
 """
 
 from typing import Annotated, Literal
@@ -65,10 +69,24 @@ class Element(BaseModel):
     description: str
 
 
-# Union members are atom/enum/element only — not patterns, not unions.
-# This narrower type breaks the circularity with FieldRef.
+class Tuple_(BaseModel):
+    """Fixed-length typed sequence — type composition, not a container.
+
+    Items reference type-tier models (atom, enum, element, union).
+    Defined before Union_ so unions can reference tuples.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    title: str
+    items: tuple["FieldRef", ...]
+    constraint: str | None = None
+    description: str
+
+
+# Union members: atom/enum/element/tuple — not patterns, not unions.
 UnionMemberRef = Annotated[
-    Atom | Enum | Element,
+    Atom | Enum | Element | Tuple_,
     BeforeValidator(ref_from_cache),
 ]
 
@@ -83,10 +101,13 @@ class Union_(BaseModel):
     description: str
 
 
-# FieldRef includes all 5 field types. Defined after Union_ to avoid
+# FieldRef includes all 6 field types. Defined after Union_ to avoid
 # forward references. Used by simple_containers, complex_containers,
 # and top_level modules.
 FieldRef = Annotated[
-    Pattern | Atom | Enum | Element | Union_,
+    Pattern | Atom | Enum | Element | Tuple_ | Union_,
     BeforeValidator(ref_from_cache),
 ]
+
+# Resolve forward reference in Tuple_.items now that FieldRef exists.
+Tuple_.model_rebuild()

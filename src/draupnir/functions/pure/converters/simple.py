@@ -29,10 +29,10 @@ from draupnir.structures.schema_output import (
     SchemaSemanticExt,
     SchemaTupleArray,
 )
+from draupnir.structures.fields import Tuple_
 from draupnir.structures.simple_containers import (
     Simplearray,
     Simplegroup,
-    Tuple_,
     VerdandiField,
 )
 

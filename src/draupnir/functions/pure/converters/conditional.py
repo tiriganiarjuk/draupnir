@@ -24,7 +24,7 @@ def build_if_condition(when: ConditionalWhen) -> SchemaCondition:
         constraint: SchemaConst | SchemaEnumConstraint = SchemaConst(const=when.equals)
     else:
         constraint = SchemaEnumConstraint(enum=when.in_)
-    return SchemaCondition(properties={when.field: constraint})
+    return SchemaCondition(properties={when.field: constraint}, required=(when.field,))
 
 
 def is_cross_section(when: ConditionalWhen | None) -> bool:

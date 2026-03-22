@@ -25,10 +25,10 @@ from draupnir.functions.pure.converters.top_level import (
 from draupnir.structures.complex_containers import (
     Array, ArrayOneOf, Group, Superarray, SuperarrayOneOf,
 )
-from draupnir.structures.fields import Union_
+from draupnir.structures.fields import Tuple_, Union_
 from draupnir.structures.schema_output import SchemaArray, SchemaOneOf, SchemaRef
 from draupnir.structures.simple_containers import (
-    Simplearray, Simplegroup, Tuple_, VerdandiField,
+    Simplearray, Simplegroup, VerdandiField,
 )
 from draupnir.structures.top_level import Section, Shallowsection
 

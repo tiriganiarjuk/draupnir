@@ -15,7 +15,7 @@ from draupnir.functions.pure.converters.zone import (
     collect_conditional,
     collect_required_optional,
 )
-from draupnir.structures.fields import Union_
+from draupnir.structures.fields import Tuple_, Union_
 from draupnir.structures.schema_output import (
     SchemaArray,
     SchemaObject,
@@ -25,7 +25,6 @@ from draupnir.structures.schema_output import (
 from draupnir.structures.simple_containers import (
     Simplearray,
     Simplegroup,
-    Tuple_,
 )
 
 

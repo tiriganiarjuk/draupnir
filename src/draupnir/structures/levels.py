@@ -23,12 +23,12 @@ from draupnir.structures.fields import (
 from draupnir.structures.fields import Enum as VerdandiEnum
 from draupnir.structures.fields import (
     Pattern,
+    Tuple_,
     Union_,
 )
 from draupnir.structures.simple_containers import (
     Simplearray,
     Simplegroup,
-    Tuple_,
 )
 from draupnir.structures.top_level import (
     Schema,
@@ -49,8 +49,8 @@ class Level(enum.Enum):
     enum = VerdandiEnum
     atom = Atom
     element = Element
-    union = Union_
     tuple = Tuple_
+    union = Union_
     field = VerdandiField
     simplearray = Simplearray
     simplegroup = Simplegroup

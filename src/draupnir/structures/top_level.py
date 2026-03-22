@@ -10,6 +10,9 @@ Ref type aliases defined here:
   ShallowFieldConditionalRef — VerdandiField only (shallowsection conditionals)
   SectionOnlyRef — section only (for schema.sections)
   ShallowsectionOnlyRef — shallowsection only (for schema.shallowsections)
+
+ShallowsectionFields parallels GroupFields — wraps required/optional/conditional
+field zones under a fields: key.
 """
 
 from typing import Annotated
@@ -117,6 +120,16 @@ class ShallowFieldConditionalEntry(BaseModel):
         return self
 
 
+class ShallowsectionFields(BaseModel):
+    """Field zones for a shallowsection — required, optional, conditional."""
+
+    model_config = ConfigDict(frozen=True)
+
+    required: dict[str, FieldItemRef] | None = None
+    optional: dict[str, FieldItemRef] | None = None
+    conditional: dict[str, ShallowFieldConditionalEntry] | None = None
+
+
 class ShallowContainers(BaseModel):
     """Container zones for a shallowsection — max 2 total containers."""
 
@@ -145,9 +158,7 @@ class Shallowsection(BaseModel):
 
     title: str
     description: str
-    required: dict[str, FieldItemRef] | None = None
-    optional: dict[str, FieldItemRef] | None = None
-    conditional: dict[str, ShallowFieldConditionalEntry] | None = None
+    fields: ShallowsectionFields | None = None
     containers: ShallowContainers | None = None
 
 

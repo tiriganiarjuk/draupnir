@@ -42,14 +42,18 @@ class TestBuildIfCondition:
         when = ConditionalWhen(field="dispatch_mode", equals="batch")
         result = build_if_condition(when)
         dumped = result.model_dump(by_alias=True, exclude_none=True)
-        assert dumped == {"properties": {"dispatch_mode": {"const": "batch"}}}
+        assert dumped == {
+            "properties": {"dispatch_mode": {"const": "batch"}},
+            "required": ("dispatch_mode",),
+        }
 
     def test_in_produces_enum(self):
         when = ConditionalWhen(field="return_mode", in_=("status", "metrics"))
         result = build_if_condition(when)
         dumped = result.model_dump(by_alias=True, exclude_none=True)
         assert dumped == {
-            "properties": {"return_mode": {"enum": ("status", "metrics")}}
+            "properties": {"return_mode": {"enum": ("status", "metrics")}},
+            "required": ("return_mode",),
         }
 
     def test_exists_produces_required(self):
@@ -76,7 +80,8 @@ class TestBuildIfNested:
                         "dispatch": {
                             "properties": {
                                 "dispatch_input_delivery": {"const": "file"}
-                            }
+                            },
+                            "required": ("dispatch_input_delivery",),
                         }
                     }
                 }
@@ -99,7 +104,8 @@ class TestBuildIfNested:
                                 "output_file_name_known": {
                                     "enum": ("partially", "unknown")
                                 }
-                            }
+                            },
+                            "required": ("output_file_name_known",),
                         }
                     }
                 }

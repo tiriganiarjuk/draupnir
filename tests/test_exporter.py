@@ -26,7 +26,7 @@ from draupnir.structures.top_level import (
     Schema,
     SchemaShallowsections,
     Shallowsection,
-    ShallowContainers,
+    ShallowsectionFields,
 )
 
 
@@ -165,8 +165,10 @@ class TestExportSchema:
     def test_produces_schema_document(self, field_string, field_integer):
         shallow = Shallowsection(
             title="Identity",
-            required={"name": field_string},
-            optional={"count": field_integer},
+            fields=ShallowsectionFields(
+                required={"name": field_string},
+                optional={"count": field_integer},
+            ),
             description="identity",
         )
         schema = Schema(
@@ -193,7 +195,9 @@ class TestExportSchema:
     def test_optional_section_not_in_required(self, field_string):
         shallow = Shallowsection(
             title="Section",
-            required={"name": field_string},
+            fields=ShallowsectionFields(
+                required={"name": field_string},
+            ),
             description="section",
         )
         schema = Schema(
@@ -222,7 +226,9 @@ class TestExportAllSchemas:
     def test_exports_only_schemas(self, field_string, field_integer):
         shallow = Shallowsection(
             title="Identity",
-            required={"name": field_string},
+            fields=ShallowsectionFields(
+                required={"name": field_string},
+            ),
             description="identity",
         )
         schema = Schema(

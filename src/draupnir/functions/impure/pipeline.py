@@ -24,15 +24,18 @@ from draupnir.structures.schema_output import FragmentDocument, SchemaDocument
 def resolve_paths(
     verdandi_dir: Path | None,
     output_dir: Path | None,
-    workspace_root: Path,
+    workspace_root: Path | None,
     project: str | None = None,
 ) -> tuple[Path, Path]:
     """Resolve Verdandi source and output directories.
 
     With --project: reads verdandi/{project}/source/, writes verdandi/{project}/output/.
     Explicit --verdandi-dir and --output-dir override the project-derived paths.
+    When both --verdandi-dir and --output-dir are given, workspace_root is not needed.
     """
-    verdandi_root = workspace_root / "tools" / "verdandi"
+    if verdandi_dir and output_dir:
+        return verdandi_dir, output_dir
+    verdandi_root = workspace_root / "verdandi"
     if project:
         verdandi = verdandi_dir or verdandi_root / project / "source"
         output = output_dir or verdandi_root / project / "output"
@@ -55,7 +58,13 @@ def run_all(
     """Load everything, export all schemas, write all files + sidecars."""
     cache: dict[str, BaseModel] = {}
     load_all_levels(verdandi_root, cache)
+    if not cache:
+        sys.stderr.write("error: no files loaded — nothing to generate\n")
+        return 1
     schemas = export_all_schemas(cache)
+    if not schemas:
+        sys.stderr.write("error: no schemas exported from loaded cache\n")
+        return 1
     for key, document in schemas.items():
         out = output_dir / schema_filename(key)
         write_schema(document, out)

@@ -1,12 +1,15 @@
-"""Simple container models: Tuple_, VerdandiField, Simplearray, Simplegroup.
+"""Simple container models: VerdandiField, Simplearray, Simplegroup.
 
 Simple containers hold field-level models but cannot nest other
-containers. Tuple_ is fixed-length, Simplearray is variable-length,
-Simplegroup is a flat object with required/optional/conditional zones.
+containers. Simplearray is variable-length, Simplegroup is a flat
+object with required/optional/conditional zones.
 
-VerdandiField (the semantic membrane) lives here because it needs Tuple_
-in its type ref, and containers need VerdandiField in their item refs.
-Defining them in the same module avoids circular imports.
+VerdandiField (the semantic membrane) lives here because containers
+need VerdandiField in their item refs, and VerdandiField needs the
+type-tier models from fields.py.
+
+Tuple_ is imported from fields.py (it is a type-tier model, not a
+container).
 
 Ref type aliases defined here:
   FieldTypeRef — type-tier + tuple (for VerdandiField.type, internal to membrane)
@@ -27,19 +30,9 @@ from draupnir.structures.fields import (
     Enum,
     FieldRef,
     Pattern,
+    Tuple_,
     Union_,
 )
-
-
-class Tuple_(BaseModel):
-    """Fixed-length typed sequence."""
-
-    model_config = ConfigDict(frozen=True)
-
-    title: str
-    items: tuple[FieldRef, ...]
-    constraint: str | None = None
-    description: str
 
 
 # --- VerdandiField: semantic membrane between type-tier and containers ---

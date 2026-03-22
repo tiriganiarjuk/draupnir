@@ -27,6 +27,7 @@ from draupnir.structures.top_level import (
     ShallowContainers,
     ShallowFieldConditionalEntry,
     Shallowsection,
+    ShallowsectionFields,
 )
 
 
@@ -230,8 +231,10 @@ def cache():
         {
             "title": "Dispatcher",
             "description": "dispatcher config",
-            "required": {"mode": "field/mode"},
-            "optional": {"name": "field/str"},
+            "fields": {
+                "required": {"mode": "field/mode"},
+                "optional": {"name": "field/str"},
+            },
         },
         context={"cache": base},
     )
@@ -492,14 +495,16 @@ class TestShallowsection:
             {
                 "title": "Test",
                 "description": "test",
-                "required": {"name": "field/str"},
+                "fields": {
+                    "required": {"name": "field/str"},
+                },
                 "containers": {
                     "required": {"params": "array/params"},
                 },
             },
             context={"cache": cache},
         )
-        assert ss.required is not None
+        assert ss.fields is not None
         assert ss.containers is not None
 
     def test_fields_only(self, cache):
@@ -507,10 +512,13 @@ class TestShallowsection:
             {
                 "title": "Test",
                 "description": "test",
-                "required": {"name": "field/str"},
+                "fields": {
+                    "required": {"name": "field/str"},
+                },
             },
             context={"cache": cache},
         )
+        assert ss.fields is not None
         assert ss.containers is None
 
     def test_max_two_containers(self, cache):
@@ -518,7 +526,9 @@ class TestShallowsection:
             {
                 "title": "Test",
                 "description": "test",
-                "required": {"name": "field/str"},
+                "fields": {
+                    "required": {"name": "field/str"},
+                },
                 "containers": {
                     "required": {
                         "params": "array/params",
@@ -536,7 +546,9 @@ class TestShallowsection:
                 {
                     "title": "Test",
                     "description": "test",
-                    "required": {"name": "field/str"},
+                    "fields": {
+                        "required": {"name": "field/str"},
+                    },
                     "containers": {
                         "required": {
                             "a": "array/params",

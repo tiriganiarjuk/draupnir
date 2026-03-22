@@ -24,6 +24,13 @@ def main() -> int:
     workspace = args.workspace or find_workspace_root(
         Path(__file__).resolve().parent,
     )
+    needs_workspace = workspace is None and not (args.verdandi_dir and args.output_dir)
+    if needs_workspace:
+        sys.stderr.write(
+            "error: cannot find workspace root (no ancestor has tools/verdandi/)\n"
+            "  use --workspace, or provide both --verdandi-dir and --output-dir\n",
+        )
+        return 1
     verdandi, output = resolve_paths(
         args.verdandi_dir, args.output_dir, workspace, args.project,
     )

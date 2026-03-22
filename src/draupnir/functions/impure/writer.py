@@ -33,13 +33,15 @@ def load_inspect_schema(workspace_root: Path) -> Callable[[Path], str]:
     return module.inspect_schema
 
 
-def write_sidecar(schema_path: Path, workspace_root: Path) -> Path:
+def write_sidecar(schema_path: Path, workspace_root: Path) -> Path | None:
     """Generate HTML sidecar from a written JSON Schema file.
 
-    Loads inspect_schema.py from the workspace tools directory
-    and calls its inspect_schema() function.
-    Returns the written sidecar path.
+    Returns the written sidecar path, or None if inspect_schema.py
+    is not available (pending removal from pipeline).
     """
+    script = workspace_root / "tools" / "inspect_schema.py"
+    if not script.exists():
+        return None
     inspect_fn = load_inspect_schema(workspace_root)
     html_text = inspect_fn(schema_path)
     sidecar_path = schema_path.with_suffix(schema_path.suffix + ".html")

@@ -272,13 +272,27 @@ class SchemaField(BaseModel):
     )
 
 
+class SchemaTupleArray(BaseModel):
+    """JSON Schema tuple array (Verdandi tuple → prefixItems + items: false)."""
+
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
+
+    title: str | None = None
+    type: str = "array"
+    description: str | None = None
+    prefix_items: tuple[SchemaField | SchemaRef, ...] = Field(alias="prefixItems")
+    items: Literal[False] = False
+    min_items: int | None = Field(default=None, alias="minItems")
+    max_items: int | None = Field(default=None, alias="maxItems")
+
+
 class SchemaOneOfField(BaseModel):
     """oneOf wrapper for union fields (Verdandi union → JSON Schema oneOf)."""
 
     model_config = ConfigDict(frozen=True, populate_by_name=True)
 
     title: str | None = None
-    one_of: tuple[SchemaField | SchemaRef, ...] = Field(alias="oneOf")
+    one_of: tuple[SchemaField | SchemaRef | SchemaTupleArray, ...] = Field(alias="oneOf")
     description: str | None = None
 
 
@@ -341,20 +355,6 @@ class SchemaArray(BaseModel):
         default=None,
         alias="x-constraint",
     )
-
-
-class SchemaTupleArray(BaseModel):
-    """JSON Schema tuple array (Verdandi tuple → prefixItems + items: false)."""
-
-    model_config = ConfigDict(frozen=True, populate_by_name=True)
-
-    title: str | None = None
-    type: str = "array"
-    description: str | None = None
-    prefix_items: tuple[SchemaField | SchemaRef, ...] = Field(alias="prefixItems")
-    items: Literal[False] = False
-    min_items: int | None = Field(default=None, alias="minItems")
-    max_items: int | None = Field(default=None, alias="maxItems")
 
 
 # Rebuild forward refs for SchemaObject.properties

@@ -8,16 +8,17 @@ import argparse
 from pathlib import Path
 
 
-def find_workspace_root(start: Path) -> Path:
+def find_workspace_root(start: Path) -> Path | None:
     """Find the workspace root by walking up from a starting path.
 
-    Identifies the workspace root as the first ancestor containing
-    tools/verdandi/. Falls back to the starting path's great-great-grandparent.
+    Draupnir and verdandi are sibling projects under a common root.
+    Walks up from start looking for an ancestor that contains verdandi/.
+    Returns None if not found.
     """
     for parent in start.parents:
-        if (parent / "tools" / "verdandi").is_dir():
+        if (parent / "verdandi").is_dir():
             return parent
-    return start.parents[3]
+    return None
 
 
 def add_mode_group(

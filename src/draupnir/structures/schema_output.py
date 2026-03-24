@@ -223,7 +223,7 @@ class SchemaRef(BaseModel):
     title: str | None = None
     description: str | None = None
     const: str | None = None
-    default: str | int | bool | None = None
+    default: str | int | bool | list[str] | None = None
     min_length: int | None = Field(default=None, alias="minLength")
     x_semantic: SchemaSemanticExt | None = Field(
         default=None,
@@ -294,6 +294,7 @@ class SchemaOneOfField(BaseModel):
     title: str | None = None
     one_of: tuple[SchemaField | SchemaRef | SchemaTupleArray, ...] = Field(alias="oneOf")
     description: str | None = None
+    default: str | int | bool | list[str] | None = None
 
 
 class SchemaObject(BaseModel):

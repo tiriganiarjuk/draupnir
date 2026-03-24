@@ -29,6 +29,7 @@ from draupnir.structures.complex_containers import (
 from draupnir.structures.simple_containers import (
     FieldItemRef,
     Simplearray,
+    Simplegroup,
     VerdandiField,
 )
 
@@ -87,7 +88,7 @@ class Section(BaseModel):
 # --- Shallowsection ---
 
 ShallowContainerRef = Annotated[
-    Simplearray | Array | Superarray | Group,
+    Simplegroup | Simplearray | Array | Superarray | Group,
     BeforeValidator(ref_from_cache),
 ]
 
@@ -131,7 +132,7 @@ class ShallowsectionFields(BaseModel):
 
 
 class ShallowContainers(BaseModel):
-    """Container zones for a shallowsection — max 2 total containers."""
+    """Container zones for a shallowsection — max 3 total containers."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -139,14 +140,14 @@ class ShallowContainers(BaseModel):
     optional: dict[str, ShallowContainerRef] | None = None
 
     @model_validator(mode="after")
-    def max_two_containers(self) -> "ShallowContainers":
+    def max_three_containers(self) -> "ShallowContainers":
         count = 0
         if self.required is not None:
             count += len(self.required)
         if self.optional is not None:
             count += len(self.optional)
-        if count > 2:
-            msg = f"shallowsection allows max 2 containers, got {count}"
+        if count > 3:
+            msg = f"shallowsection allows max 3 containers, got {count}"
             raise ValueError(msg)
         return self
 

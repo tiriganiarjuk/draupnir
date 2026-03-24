@@ -24,6 +24,7 @@ from draupnir.structures.schema_output import (
     SchemaArray,
     SchemaConstraintBlock,
     SchemaField,
+    SchemaOneOfField,
     SchemaRef,
     SchemaSemanticExt,
 )
@@ -60,13 +61,14 @@ def build_verdandi_field_refs(
     updates: dict[str, str | int | SchemaSemanticExt | SchemaConstraintBlock] = {
         "title": field.title, "description": meta.description,
     }
+    if isinstance(inner, (SchemaField, SchemaOneOfField)):
+        if field.default is not None:
+            updates["default"] = field.default
     if isinstance(inner, SchemaField):
         if meta.min_length is not None:
             updates["min_length"] = meta.min_length
         if field.const is not None:
             updates["const"] = field.const
-        if field.default is not None:
-            updates["default"] = field.default
     if isinstance(inner, (SchemaField, SchemaArray)):
         if meta.semantic:
             updates["x_semantic"] = meta.semantic

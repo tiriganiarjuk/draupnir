@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from draupnir.structures.fields import (
+from draupnir.structure.model.fields import (
     Atom,
     Element,
     Enum,

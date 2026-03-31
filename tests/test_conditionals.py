@@ -4,13 +4,13 @@ Covers the exists predicate, value-based predicates, and the leading-dot
 cross-section path convention.
 """
 
-from draupnir.functions.pure.converters.conditional import (
+from draupnir.logic.transform.conditional_build.composed import (
     build_conditional_entry,
     build_if_condition,
+    build_if_nested,
     is_cross_section,
 )
-from draupnir.functions.pure.build_cross_section import build_if_nested
-from draupnir.structures.conditionals import ConditionalWhen
+from draupnir.structure.model.conditionals import ConditionalWhen
 
 
 # --- is_cross_section ---

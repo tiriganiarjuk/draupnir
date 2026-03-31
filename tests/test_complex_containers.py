@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from draupnir.structures.complex_containers import (
+from draupnir.structure.model.complex_containers import (
     Array,
     ArrayOneOf,
     Group,
@@ -14,14 +14,14 @@ from draupnir.structures.complex_containers import (
     Superarray,
     SuperarrayOneOf,
 )
-from draupnir.structures.fields import Atom, Element, Enum, Pattern, Union_
-from draupnir.structures.simple_containers import (
+from draupnir.structure.model.fields import Atom, Element, Enum, Pattern, Union_
+from draupnir.structure.model.simple_containers import (
     Simplearray,
     Simplegroup,
     Tuple_,
     VerdandiField,
 )
-from draupnir.structures.top_level import (
+from draupnir.structure.model.top_level import (
     Schema,
     Section,
     ShallowContainers,

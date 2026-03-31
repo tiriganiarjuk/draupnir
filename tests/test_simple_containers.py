@@ -3,9 +3,9 @@
 import pytest
 from pydantic import ValidationError
 
-from draupnir.structures.conditionals import ConditionalWhen
-from draupnir.structures.fields import Atom, Enum, Pattern, Union_
-from draupnir.structures.simple_containers import (
+from draupnir.structure.model.conditionals import ConditionalWhen
+from draupnir.structure.model.fields import Atom, Enum, Pattern, Union_
+from draupnir.structure.model.simple_containers import (
     Simplearray,
     Simplegroup,
     SimplegroupConditionalEntry,

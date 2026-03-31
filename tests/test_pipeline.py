@@ -11,10 +11,10 @@ import jsonschema
 import pytest
 from pydantic import BaseModel
 
-from draupnir.functions.impure.loader import load_all_levels
-from draupnir.functions.impure.pipeline import resolve_paths, schema_filename
-from draupnir.functions.impure.writer import serialize_schema
-from draupnir.functions.impure.exporter import export_all_schemas
+from draupnir.logic.impure.loader.composed import load_all_levels
+from draupnir.logic.impure.pipeline.composed import resolve_paths, schema_filename
+from draupnir.logic.impure.writer.composed import serialize_schema
+from draupnir.logic.impure.exporter.composed import export_all_schemas
 
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[3]

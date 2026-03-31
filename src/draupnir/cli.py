@@ -1,47 +1,42 @@
 """Draupnir CLI — generate JSON Schema from Verdandi YAML.
 
-Default mode is --all (generate everything). Single-schema mode
-exists for debugging only.
+Default mode generates all schemas. --check, --list, --fragments
+are mutually exclusive alternatives.
 """
 
-import sys
-from pathlib import Path
+import typer
 
-from draupnir.functions.impure.cli_arguments import build_parser, find_workspace_root
-from draupnir.functions.impure.pipeline import (
-    resolve_paths,
-    run_all,
-    run_check,
-    run_fragments,
-    run_list,
-)
+from draupnir.logic.entry_point import run_pipeline
+from draupnir.structure.config.pipeline import PipelineArgs
+
+app = typer.Typer(help="Generate JSON Schema from Verdandi YAML.")
 
 
-def main() -> int:
-    """CLI entry point."""
-    parser = build_parser()
-    args = parser.parse_args()
-    workspace = args.workspace or find_workspace_root(
-        Path(__file__).resolve().parent,
+@app.command()
+def run(
+    check: bool = typer.Option(False, help="Check for drift without writing"),
+    list_schemas: bool = typer.Option(False, "--list", help="List available schemas"),
+    fragments: bool = typer.Option(False, help="Generate include-fragment schemas"),
+    project: str | None = typer.Option(None, help="Verdandi project name"),
+    verdandi_dir: str | None = typer.Option(None, help="Override Verdandi source directory"),
+    output_dir: str | None = typer.Option(None, help="Override output directory"),
+    workspace: str | None = typer.Option(None, help="Override workspace root"),
+) -> None:
+    """Generate JSON Schema from Verdandi YAML."""
+    args = PipelineArgs(
+        check=check,
+        list_schemas=list_schemas,
+        fragments=fragments,
+        project=project,
+        verdandi_dir=verdandi_dir,
+        output_dir=output_dir,
+        workspace=workspace,
     )
-    needs_workspace = workspace is None and not (args.verdandi_dir and args.output_dir)
-    if needs_workspace:
-        sys.stderr.write(
-            "error: cannot find workspace root (no ancestor has tools/verdandi/)\n"
-            "  use --workspace, or provide both --verdandi-dir and --output-dir\n",
-        )
-        return 1
-    verdandi, output = resolve_paths(
-        args.verdandi_dir, args.output_dir, workspace, args.project,
-    )
-    if args.check:
-        return run_check(verdandi, output)
-    if args.list:
-        return run_list(verdandi)
-    if args.fragments:
-        return run_fragments(verdandi, output, workspace)
-    return run_all(verdandi, output, workspace)
+    code = run_pipeline(args)
+    if code != 0:
+        raise typer.Exit(code)
 
 
-if __name__ == "__main__":
-    sys.exit(main())
+def main() -> None:
+    """Entry point for pyproject.toml."""
+    app()

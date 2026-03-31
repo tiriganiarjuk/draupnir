@@ -3,26 +3,26 @@
 import pytest
 from pydantic import BaseModel
 
-from draupnir.functions.impure.exporter import (
+from draupnir.logic.impure.exporter.composed import (
     export_all_schemas,
     export_schema,
 )
-from draupnir.functions.pure.tree_walk import (
+from draupnir.logic.pure.tree_walk.composed import (
     count_refs,
     iter_child_models,
     reverse_cache_index,
     shared_keys,
 )
-from draupnir.structures.complex_containers import (
+from draupnir.structure.model.complex_containers import (
     Array,
     Group,
     GroupContainers,
     GroupFields,
 )
-from draupnir.structures.fields import Atom, Pattern
-from draupnir.structures.schema_output import SchemaDocument, SchemaObject
-from draupnir.structures.simple_containers import Simplegroup, VerdandiField
-from draupnir.structures.top_level import (
+from draupnir.structure.model.fields import Atom, Pattern
+from draupnir.structure.model.schema_output import SchemaDocument, SchemaObject
+from draupnir.structure.model.simple_containers import Simplegroup, VerdandiField
+from draupnir.structure.model.top_level import (
     Schema,
     SchemaShallowsections,
     Shallowsection,

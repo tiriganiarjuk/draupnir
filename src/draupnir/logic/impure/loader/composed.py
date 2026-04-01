@@ -1,7 +1,14 @@
 """Loader composed — load all levels into cache.
 
-CC=4+. Iterates Level enum in dependency order, discovers YAML files
-per level directory, loads each via gate + generated input model.
+CC=4+. Populates the model cache by iterating the Level enum in
+dependency order (pattern → atom → element → ... → schema). Order
+matters because the graph builder assumes all referenced models exist
+in the cache when processing a node. Missing level directories are
+silently skipped (not all projects use all levels).
+
+Errors are collected rather than raised immediately — this allows
+reporting all validation failures in one pass rather than stopping
+at the first broken file.
 """
 
 import sys
@@ -18,6 +25,11 @@ def load_all_levels(
     root: Path, cache: dict[str, BaseModel],
 ) -> list[str]:
     """Populate cache with all Verdandi YAML files, bottom-up by level.
+
+    Cache keys are "level/name" (e.g., "atom/safe-string", "schema/task").
+    Sorted glob ensures deterministic ordering within each level. Both
+    ValueError (gate validation failure) and ValidationError (Pydantic
+    model parse failure) are caught — both indicate malformed input YAML.
 
     Returns a list of error messages (empty on success).
     """

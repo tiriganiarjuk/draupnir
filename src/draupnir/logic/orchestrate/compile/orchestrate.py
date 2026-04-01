@@ -1,8 +1,24 @@
 """Schema pipeline orchestration — compile, export, and run pipeline modes.
 
-Orchestrate level (CC=1-5). Compiles the dependency graph via topological
-sort, dispatches each node to its builder, detects $defs from in-degree,
-exports assembled schemas and fragments, and routes pipeline modes.
+Orchestrate level (CC=1-5). Wires together the pure (graph analysis),
+transform (schema building), and impure (I/O) layers into a complete
+pipeline. The main data flow:
+
+  load_all_levels → build_graph → [per schema: compile_subtree → assemble_schema
+  → collect_graph_conditionals → merge allOf] → write_schema
+
+Key architectural decisions:
+- Per-schema compilation: each schema root gets its own BuildContext and
+  $defs set via compile_subtree + schema_shared_keys. This ensures $defs
+  only contain types actually shared within that schema's subtree.
+- Dispatch table: lives inside compile_subtree as a local dict, not at
+  module level (gleipnir bans module-level constants in logic zones).
+- Cross-section conditionals: collected via graph traversal AFTER assembly,
+  then merged via model_copy because they require path information from
+  the schema→section→group edge chain that assembly doesn't track.
+- Pipeline modes: generate (default), check (drift detection), list
+  (schema names), fragments (include files only). Resolved from mutually
+  exclusive CLI flags.
 """
 
 import sys
@@ -13,7 +29,7 @@ from pydantic import BaseModel
 
 from draupnir.logic.impure.loader.composed import load_all_levels
 from draupnir.logic.impure.pipeline.composed import check_schema_drift, resolve_paths
-from draupnir.logic.impure.pipeline.primitive import schema_filename
+from draupnir.logic.pure.serialize.primitive import schema_filename
 from draupnir.logic.impure.pipeline.simple import (
     args_to_paths,
     context_to_paths,
@@ -72,8 +88,11 @@ def build_edge_zone_conditional(
 ) -> SchemaRootConditional | None:
     """Build a zone conditional from a schema→section edge, or None.
 
-    Returns None if the edge is not a conditional zone or if the when
-    condition is not cross-section.
+    Handles the case where an entire section is conditional (e.g.,
+    "include this section only_when some cross-section field equals X").
+    Returns None if the edge zone isn't "conditional" or if the when
+    condition references a same-section field (those are handled inline
+    by the transform layer's conditional_build).
     """
     if edge_data["zone"] != "conditional":
         return None
@@ -93,8 +112,15 @@ def collect_graph_conditionals(
 ) -> list[SchemaRootConditional]:
     """Collect cross-section conditionals by walking graph edges.
 
-    Iterates schema → section edges for zone conditionals, then
-    delegates section → group → field traversal to the composed layer.
+    Two sources of cross-section conditionals:
+    1. Zone conditionals: schema→section edges where zone="conditional"
+       (entire section is conditional on a cross-section field)
+    2. Field conditionals: section→group→field edges with dotted-path
+       when.field values (individual fields conditional on cross-section)
+
+    Only section-level successors are walked (not shallowsections) because
+    the old pipeline's conditional collection only traversed sections.
+    The level filter ensures parity with the baseline output.
     """
     results: list[SchemaRootConditional] = []
     for section_key in graph.successors(schema_key):
@@ -121,9 +147,17 @@ def compile_subtree(
 ) -> tuple[BuildContext, dict[str, BaseModel]]:
     """Build a subtree with per-root $defs promotion.
 
-    Walks descendants of root_key in topological order. Nodes in the
-    shared set are promoted to $defs; all others are inlined. Returns
-    a fresh context and defs scoped to this root.
+    Walks descendants of root_key in topological order (guaranteed by
+    subtree_build_order filtering the global topo sort). Each node is
+    dispatched to its level-specific builder. The builder reads pre-built
+    children from context.built — because we process in topo order, all
+    children are built before their parents.
+
+    Shared nodes (in-degree >= 2 within this subtree) are promoted to
+    $defs: stored in the defs dict and replaced with a SchemaRef in
+    context.built. context.full always retains the complete schema for
+    functions that need actual field values (e.g., element inheriting
+    atom's pattern, field metadata needing inner type's description).
     """
     dispatch = {
         "pattern": build_pattern,
@@ -163,7 +197,13 @@ def compile_subtree(
 def export_all_schemas(
     graph: nx.DiGraph,
 ) -> dict[str, SchemaDocument]:
-    """Assemble SchemaDocuments for all schema-level nodes in the graph."""
+    """Assemble SchemaDocuments for all schema-level nodes in the graph.
+
+    Each schema is compiled independently: fresh BuildContext, per-schema
+    shared set, per-schema $defs. Cross-section conditionals are collected
+    after assembly and merged via model_copy because they require graph
+    traversal information that the assembly layer doesn't have access to.
+    """
     schemas: dict[str, SchemaDocument] = {}
     for cache_key in graph.nodes:
         if graph.nodes[cache_key]["level"] != "schema":
@@ -182,7 +222,13 @@ def export_all_schemas(
 def export_fragments(
     graph: nx.DiGraph,
 ) -> dict[str, FragmentDocument]:
-    """Assemble FragmentDocuments for all registered fragments."""
+    """Assemble FragmentDocuments for all registered fragments.
+
+    Fragments are standalone include files for TOML. The Fragment enum
+    defines the known fragments and their cache keys. Each fragment is
+    compiled independently like schemas, but assembled via assemble_fragment
+    which handles the array-wrapping and group-inlining differences.
+    """
     fragments: dict[str, FragmentDocument] = {}
     for fragment in Fragment:
         fragment_key = fragment.value
@@ -202,7 +248,12 @@ def export_fragments(
 def load_and_build_graph(
     verdandi_root: Path,
 ) -> nx.DiGraph | str:
-    """Load all levels, build graph. Returns graph or error string."""
+    """Load all Verdandi YAML levels into cache, then build the dependency graph.
+
+    Returns the DiGraph on success or an error string on load failure.
+    The string-or-graph return type avoids exceptions for expected errors
+    (missing files, validation failures) while keeping the caller simple.
+    """
     cache: dict[str, BaseModel] = {}
     errors = load_all_levels(verdandi_root, cache)
     if errors:
@@ -214,7 +265,12 @@ def run_generate(
     verdandi_root: Path,
     output_dir: Path,
 ) -> int:
-    """Load, build graph, export all schemas and fragments, write to disk."""
+    """Full generation pipeline: load → graph → compile → assemble → write.
+
+    Writes both schemas (13 for agent-builder) and fragments (7) to
+    the output directory. Fragment filenames use hyphens (underscores
+    replaced) to match the established naming convention.
+    """
     result = load_and_build_graph(verdandi_root)
     if isinstance(result, str):
         sys.stderr.write(result + "\n")
@@ -233,7 +289,11 @@ def run_check(
     verdandi_root: Path,
     output_dir: Path,
 ) -> int:
-    """Load, build graph, compare against on-disk schemas."""
+    """Drift check: compile schemas in memory and compare against on-disk files.
+
+    Returns 0 if all on-disk schemas match compiled output, 1 if any
+    differ or are missing. Used by CI to detect stale schema files.
+    """
     result = load_and_build_graph(verdandi_root)
     if isinstance(result, str):
         sys.stderr.write(result + "\n")
@@ -249,7 +309,7 @@ def run_fragments(
     verdandi_root: Path,
     output_dir: Path,
 ) -> int:
-    """Load, build graph, export and write fragments only."""
+    """Fragment-only generation: skip full schemas, write only include files."""
     result = load_and_build_graph(verdandi_root)
     if isinstance(result, str):
         sys.stderr.write(result + "\n")
@@ -264,7 +324,11 @@ def run_list(
     verdandi_root: Path,
     output_dir: Path,
 ) -> int:
-    """Load levels and list available schema names. Ignores output_dir."""
+    """List available schema names from the Verdandi source directory.
+
+    Loads all levels but only prints cache keys starting with "schema/".
+    output_dir is accepted for signature compatibility but not used.
+    """
     cache: dict[str, BaseModel] = {}
     errors = load_all_levels(verdandi_root, cache)
     if errors:
@@ -284,7 +348,12 @@ def resolve_mode(
     list_schemas: bool,
     fragments: bool,
 ) -> PipelineMode | str:
-    """Resolve mutually exclusive flags to a single mode, or return error."""
+    """Resolve mutually exclusive CLI flags to a single PipelineMode.
+
+    Returns error string if more than one flag is set. Default mode is
+    generate (no flags). The sum check catches combinations like
+    --check --fragments which would be ambiguous.
+    """
     if sum([check, list_schemas, fragments]) > 1:
         return "error: --check, --list, and --fragments are mutually exclusive"
     if check:
@@ -302,7 +371,12 @@ def resolve_workspace(
     workspace: Path | None,
     project: str | None,
 ) -> tuple[Path, Path] | str:
-    """Resolve workspace and paths. Returns (verdandi, output) or error string."""
+    """Resolve workspace root and derive Verdandi/output paths.
+
+    Auto-discovers workspace by walking up from this file's location.
+    Falls back to explicit paths if workspace can't be found. Returns
+    error string when neither workspace nor explicit paths are available.
+    """
     resolved_workspace = workspace or find_workspace_root(
         Path(__file__).resolve().parent,
     )
@@ -315,7 +389,12 @@ def resolve_workspace(
 
 
 def resolve_context(args: PipelineArgs) -> PipelineContext | str:
-    """Resolve raw CLI args into a validated pipeline context."""
+    """Resolve raw CLI args into a validated pipeline context.
+
+    Chains mode resolution → path resolution → context construction.
+    Returns error string at any failure point rather than raising,
+    keeping the error handling uniform through the orchestrate layer.
+    """
     mode = resolve_mode(args.check, args.list_schemas, args.fragments)
     if not isinstance(mode, PipelineMode):
         return mode
@@ -332,7 +411,12 @@ def resolve_context(args: PipelineArgs) -> PipelineContext | str:
 
 
 def run_pipeline(args: PipelineArgs) -> int:
-    """Resolve CLI args and dispatch to the appropriate pipeline mode."""
+    """Top-level pipeline entry: resolve context then dispatch to mode handler.
+
+    The mode_dispatch dict maps PipelineMode enum values to the run_*
+    functions. All mode handlers share the same (verdandi, output) → int
+    signature for uniform dispatching.
+    """
     context = resolve_context(args)
     if isinstance(context, str):
         sys.stderr.write(context + "\n")

@@ -1,49 +1,56 @@
-"""Graph build simple — ref identification and field extraction.
+"""Graph build simple — ref identification, model inspection, subgraph analysis.
 
-CC=1-3. Composes primitives into ref pattern detection.
-Extracts inspectable children from BaseModel fields.
-Unwraps RootModel wrappers used by generated input models.
+CC=1-3. Ref identification checks whether a string is a cache key
+(level/name format with a known Level prefix). Model inspection detects
+zone set models by field name presence. Subgraph analysis computes
+per-schema $defs candidates via induced subgraph in-degree.
+
+RootModel unwrapping has moved to pure/unwrap/simple.py.
 """
 
 import networkx as nx
-from pydantic import BaseModel, RootModel
+from pydantic import BaseModel
 
 from draupnir.logic.pure.graph_build.primitive import is_known_level, ref_prefix
 from draupnir.structure.config.edge_ref import EdgeRef
 
 
 def is_cache_ref(value: str) -> bool:
-    """Check if a string matches the level/name cache ref pattern."""
+    """Compose prefix extraction + level check to identify cache ref strings.
+
+    Must contain a slash (level/name format) AND the prefix must be a
+    known Level member. This filters out plain strings that happen to
+    contain slashes (e.g., file paths in descriptions).
+    """
     return "/" in value and is_known_level(ref_prefix(value))
 
 
 def base_model_children(model: BaseModel) -> list[BaseModel | str]:
-    """Return non-None field values that are BaseModel or str instances."""
+    """Iterate model fields via Pydantic's __iter__ and keep traversable children.
+
+    Filters to BaseModel (nested models to recurse into) and str (potential
+    cache ref strings to check). Skips None fields and non-model scalars.
+    """
     return [value for _name, value in model if isinstance(value, (BaseModel, str))]
 
 
 def has_zone_fields(model: BaseModel) -> bool:
-    """Check if a model has required/optional/conditional zone structure."""
+    """Detect zone set models by checking for required + optional field names.
+
+    Zone sets (GroupFields, SchemaSections, SectionContainers, etc.) always
+    have required/optional/conditional fields. Checking for the first two
+    is sufficient — no non-zone model uses both field names.
+    """
     field_names = {name for name, _ in model}
     return "required" in field_names and "optional" in field_names
 
 
-def unwrap_zone_dict(wrapper: RootModel | None) -> dict[str, BaseModel] | None:
-    """Unwrap a zone RootModel wrapper to its dict, or None if absent.
-
-    Zone dicts in generated input models are RootModel[dict[str, RefType] | None].
-    Returns the inner dict, or None if wrapper is missing or wrong type.
-    """
-    if wrapper is None:
-        return None
-    return wrapper.root if isinstance(wrapper.root, dict) else None
-
-
 def edge_ref_to_attrs(edge_ref: EdgeRef) -> dict[str, str | BaseModel]:
-    """Convert an EdgeRef to a dict of edge attributes for graph construction.
+    """Flatten an EdgeRef into a kwargs dict for nx.DiGraph.add_edge.
 
-    Always includes zone and name. Adds only_when/always_when/not_when
-    when present on the EdgeRef.
+    NetworkX stores edge attributes as key-value pairs. The when-condition
+    fields are only included when present to avoid polluting non-conditional
+    edges with None values that would need filtering downstream.
     """
     attrs: dict[str, str | BaseModel] = {"zone": edge_ref.zone, "name": edge_ref.name}
     for when_field in ("only_when", "always_when", "not_when"):
@@ -54,11 +61,15 @@ def edge_ref_to_attrs(edge_ref: EdgeRef) -> dict[str, str | BaseModel]:
 
 
 def schema_shared_keys(schema_key: str, graph: nx.DiGraph) -> frozenset[str]:
-    """Find cache keys shared within a schema's subgraph.
+    """Compute per-schema $defs candidates via induced subgraph in-degree.
 
-    Returns keys with in-degree >= 2 in the induced subgraph of the
-    schema's descendants. These are nodes referenced by 2+ parents
-    within a single schema — candidates for per-schema $defs.
+    Extracts descendants, builds the induced subgraph, then finds nodes
+    with in-degree >= 2 within that subgraph. These are referenced by
+    2+ parents in this schema's tree — they should be extracted to $defs
+    and replaced with $ref to avoid duplication in the output JSON.
+
+    Per-schema rather than global because the same node may be shared
+    in one schema's tree but unique in another's.
     """
     descendants = nx.descendants(graph, schema_key)
     subgraph = graph.subgraph(descendants)
@@ -66,13 +77,3 @@ def schema_shared_keys(schema_key: str, graph: nx.DiGraph) -> frozenset[str]:
         node for node in subgraph.nodes
         if subgraph.in_degree(node) >= 2
     )
-
-
-def unwrap_ref_value(wrapper: RootModel | BaseModel | str) -> str | None:
-    """Unwrap a ref wrapper to its string cache key, or None.
-
-    Ref types in generated input models are RootModel[str].
-    Returns the string if present, None otherwise.
-    """
-    ref_value = wrapper.root if isinstance(wrapper, RootModel) else wrapper
-    return ref_value if isinstance(ref_value, str) else None

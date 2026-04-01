@@ -1,11 +1,13 @@
 """Schema writing — file output.
 
-CC=1 writer. Serializes and writes schema documents to disk.
+CC=1 writer. Creates parent directories if needed (mkdir -p) and writes
+the serialized JSON Schema with a trailing newline for POSIX compliance.
+Returns the path written so callers can log or collect output paths.
 """
 
 from pathlib import Path
 
-from draupnir.logic.impure.writer.primitive import serialize_schema
+from draupnir.logic.pure.serialize.primitive import serialize_schema
 from draupnir.structure.model.schema_output import FragmentDocument, SchemaDocument
 
 

@@ -1,7 +1,12 @@
 """Draupnir CLI — generate JSON Schema from Verdandi YAML.
 
-Default mode generates all schemas. --check, --list, --fragments
-are mutually exclusive alternatives.
+Thin typer wrapper that parses CLI args into a PipelineArgs dataclass
+and delegates to run_pipeline (orchestrate layer). All business logic
+lives in the orchestrate layer — this module only handles CLI concerns
+(argument parsing, exit code translation).
+
+Default mode generates all schemas and fragments. --check, --list, and
+--fragments are mutually exclusive alternatives for CI and tooling use.
 """
 
 import typer
@@ -22,7 +27,12 @@ def run(
     output_dir: str | None = typer.Option(None, help="Override output directory"),
     workspace: str | None = typer.Option(None, help="Override workspace root"),
 ) -> None:
-    """Generate JSON Schema from Verdandi YAML."""
+    """Generate JSON Schema from Verdandi YAML.
+
+    Translates typer CLI args to a PipelineArgs dataclass and delegates
+    to the orchestrate layer. Non-zero return codes become typer.Exit
+    to propagate the failure to the shell.
+    """
     args = PipelineArgs(
         check=check,
         list_schemas=list_schemas,

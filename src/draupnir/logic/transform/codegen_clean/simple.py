@@ -3,8 +3,11 @@
 CC=1-3. No cross-module imports.
 
 Predicate for identifying Annotated fields that reference RootModel types.
-This is the classifier that decides whether a given Field annotation should
-have its constraints stripped in the composed-level state machine.
+This is the gate that the composed-level state machine uses to decide
+whether to strip constraints from a given Field block. The look-ahead
+approach (check next line after 'Annotated[') works because
+datamodel-code-generator always puts the type on the line following
+the Annotated opening bracket.
 """
 
 

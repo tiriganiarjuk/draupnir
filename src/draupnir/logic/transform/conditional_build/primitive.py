@@ -1,7 +1,12 @@
-"""Same-section conditional schema building — single-expression constructors.
+"""Same-section conditional schema building — if/then/else node constructors.
 
-CC=1. Builds if/then/else schema nodes for same-section conditional entries.
-No branching.
+CC=1. These produce the SchemaConditional nodes that appear inside section
+and group schemas (NOT the root allOf entries — those are cross-section
+and handled by pure/cross_section/). Each mode maps to a different
+JSON Schema if/then/else shape:
+  only_when: then=required, else=forbidden (properties: {field: false})
+  always_when: then=required, no else
+  not_when: then=forbidden, no else
 """
 
 from draupnir.structure.model.schema_output import (

@@ -1,16 +1,26 @@
-"""Zone collection — iterate required/optional/conditional dicts.
+"""Zone collection — conditional zone iteration and when-condition adaptation.
 
-CC=4-8 collectors. Builds properties, required keys, and conditional
-schemas from zone dicts. Conditional entries are RootModel wrappers —
-unwrap .root to access the entry, then .ref.root for the cache key.
-Conditional when values are adapted from generated RootModel wrappers
-to the original ConditionalWhen format for downstream builders.
+CC=4-8 collectors. The conditional zone is structurally different from
+required/optional: each entry wraps a ref (cache key) alongside
+only_when/always_when/not_when conditions that control field visibility.
+
+adapt_when bridges the generated input model's RootModel-wrapped
+ConditionalWhen to the canonical ConditionalWhen dataclass used by
+conditional_build. This is necessary because datamodel-code-generator
+wraps every field in RootModel, creating three layers of wrapping:
+  RootModel → inner model → RootModel per field (.field, .equals, .in_)
+
+collect_conditional produces both the properties dict (always included)
+and the conditionals list (if/then/else nodes for same-section allOf).
+Cross-section conditionals (dotted field paths) are filtered out by
+conditional_build — they're handled at the orchestrate level via
+graph traversal.
 """
 
 from pydantic import BaseModel, RootModel
 
 from draupnir.logic.transform.conditional_build.simple import build_conditional_entry
-from draupnir.logic.transform.zone_collect.simple import (
+from draupnir.logic.transform.unwrap.simple import (
     unwrap_when_equals,
     unwrap_when_in_values,
 )
@@ -20,11 +30,16 @@ from draupnir.structure.model.schema_output import SchemaConditional
 
 
 def adapt_when(when_wrapper: RootModel | None) -> ConditionalWhen | None:
-    """Convert a generated ConditionalWhen RootModel to the original format.
+    """Convert a generated ConditionalWhen RootModel to the canonical format.
 
-    Generated input models wrap ConditionalWhen in RootModel, and inner
-    fields (.field, .equals, .in_) are also RootModel wrappers.
-    Determines active predicate: equals/in_ → value match, else → exists.
+    Unwraps three layers: outer RootModel → inner model → per-field RootModel.
+    Determines the active predicate type:
+    - equals or in_ present → value-matching condition (exists stays None)
+    - neither present → existence check (exists=True)
+
+    The canonical ConditionalWhen is consumed by conditional_build/simple.py
+    which dispatches to the appropriate if/then/else builder based on
+    which when-condition (only_when, always_when, not_when) is active.
     """
     if when_wrapper is None:
         return None
@@ -42,10 +57,17 @@ def collect_conditional(
     conditional: dict[str, RootModel] | None,
     context: BuildContext,
 ) -> tuple[dict[str, BaseModel], list[SchemaConditional]]:
-    """Build properties and conditionals from a conditional zone.
+    """Build properties and conditionals from a conditional zone dict.
 
-    Each dict value is a RootModel wrapping a conditional entry with
-    .ref (RootModel[str] cache key), .only_when, .always_when, .not_when.
+    Each dict value is a RootModel wrapping a conditional entry model.
+    The entry has .ref (RootModel[str] cache key) and up to one of
+    .only_when/.always_when/.not_when. The property is always added to
+    the schema (the field exists); the conditional controls whether
+    it appears in required or is forbidden via if/then/else.
+
+    build_conditional_entry returns None for cross-section conditionals
+    (dotted field paths) — those are collected separately by the
+    orchestrate layer via graph traversal.
     """
     properties: dict[str, BaseModel] = {}
     conditionals: list[SchemaConditional] = []

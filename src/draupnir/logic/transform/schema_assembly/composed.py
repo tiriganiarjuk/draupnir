@@ -1,8 +1,13 @@
 """Schema assembly — graph-based property collection and fragment assembly.
 
-CC=4-8 functions. Collects properties and required keys by querying
-graph edges from schema nodes to their section successors.
-Assembles fragment documents from compiled cache entries.
+CC=4-8. Replaces the old zone-dict-walking approach with graph edge queries.
+Instead of unwrapping model.sections.required/optional zone dicts, these
+functions query graph.successors() and read edge attributes for zone and
+property name. This makes assembly a pure graph query — the graph is the
+single source of truth for all parent-child relationships.
+
+Fragment assembly handles two root shapes: arrays (wrapped in an "items"
+property for TOML compatibility) and groups (properties inlined directly).
 """
 
 import networkx as nx
@@ -17,11 +22,13 @@ def collect_graph_section_properties(
     graph: nx.DiGraph,
     context: BuildContext,
 ) -> tuple[dict[str, BaseModel], list[str]]:
-    """Collect properties and required keys from graph edges.
+    """Iterate schema successors via graph edges to build the properties dict.
 
-    Queries successors of a schema node. Each edge carries zone
-    (required/optional/conditional) and name (property key in output).
-    Required-zone edges produce required keys.
+    Each edge's "name" attr becomes the property key in the output JSON Schema.
+    Each edge's "zone" attr determines whether the key goes into "required".
+    The built schema for each successor is looked up from context.built —
+    this is either the inline schema or a SchemaRef if the node was promoted
+    to $defs during per-schema compilation.
     """
     properties: dict[str, BaseModel] = {}
     required_keys: list[str] = []
@@ -43,10 +50,15 @@ def assemble_fragment(
     context: BuildContext,
     defs: dict[str, BaseModel],
 ) -> FragmentDocument:
-    """Assemble a FragmentDocument from a compiled cache entry.
+    """Build a standalone fragment document for TOML include files.
 
-    Uses context.full for the root (in case it's a SchemaRef in context.built).
-    output_name is the fragment's enum name (e.g., 'include_success_criteria').
+    Uses context.full (not .built) because the root node itself may be a
+    SchemaRef in context.built if it was promoted to $defs — but the
+    fragment needs the full schema as its root content.
+
+    Arrays are wrapped in {"items": schema} because TOML root is always
+    a table — bare arrays can't be represented. Groups are emitted with
+    their properties directly as the fragment root.
     """
     root_schema = context.full[cache_key]
     fragment_name = output_name.replace("_", "-")

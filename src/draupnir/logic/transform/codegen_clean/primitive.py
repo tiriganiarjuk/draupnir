@@ -26,5 +26,10 @@ def strip_future_annotations(content: str) -> str:
 
 
 def collect_rootmodel_names(content: str) -> set[str]:
-    """Find all class names that extend RootModel."""
+    """Find all class names that extend RootModel via regex.
+
+    These names feed the simple-level classifier that decides which
+    Annotated fields need constraint stripping. The regex matches
+    'class FooBar(RootModel' and captures 'FooBar'.
+    """
     return set(re.findall(r"class (\w+)\(RootModel", content))

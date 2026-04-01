@@ -1,8 +1,15 @@
 """Schema building — branching builders.
 
-CC=2-3 builders. Each has a small number of branches or a single
-iteration. Looks up pre-built children from the build context using
-cache key strings extracted from generated input model RootModel wrappers.
+CC=2-3 builders. Each resolves child schemas from BuildContext by
+extracting cache key strings through generated input model RootModel
+wrappers (.root access). The build context is populated bottom-up by
+the compile loop (orchestrate), so all children are guaranteed to exist
+by the time their parent builder runs.
+
+The two context dicts serve different purposes:
+- context.built: may contain SchemaRef if the node was promoted to $defs
+- context.full: always contains the complete schema, used when the caller
+  needs actual field values (e.g., element inheriting atom's pattern)
 """
 
 from pydantic import BaseModel, RootModel
@@ -20,15 +27,13 @@ from draupnir.structure.model.schema_output import (
 
 
 def optional_tuple[T](items: list[T]) -> tuple[T, ...] | None:
-    """Return tuple of items if non-empty, else None."""
+    """Convert list to tuple, or None if empty.
+
+    JSON Schema uses null (absent key) rather than empty arrays for
+    optional array fields like "required". Pydantic's exclude_none
+    serialization then omits these cleanly.
+    """
     return tuple(items) if items else None
-
-
-def unwrap_zone(zone: RootModel | None) -> dict[str, RootModel] | None:
-    """Unwrap a RootModel zone wrapper to get the underlying dict or None."""
-    if zone is None:
-        return None
-    return zone.root
 
 
 def build_items_or_one_of(
@@ -37,8 +42,13 @@ def build_items_or_one_of(
 ) -> BaseModel | SchemaOneOf:
     """Build items schema: single ref or oneOf from a typed container.
 
-    items_wrapper.root is either a RootModel[str] (single ref) or a
-    *OneOf model with .oneOf.root -> list of RootModel[str] members.
+    Dispatches on the inner type after unwrapping the outer RootModel:
+    - RootModel[str]: single type ref → look up built schema directly
+    - *OneOf model: has .oneOf.root → list of RootModel[str] members,
+      each resolved and wrapped in SchemaOneOf
+
+    This handles the Verdandi pattern where array items can be either a
+    single type or a union of types (oneOf).
     """
     inner = items_wrapper.root
     if isinstance(inner, RootModel):
@@ -48,7 +58,12 @@ def build_items_or_one_of(
 
 
 def build_element(model: BaseModel, context: BuildContext) -> SchemaField:
-    """Element -> inherits atom/enum schema, adds format."""
+    """Element -> inherits atom/enum schema, adds format.
+
+    Uses context.full (not .built) because the inherited type may have
+    been promoted to $defs — but element needs the actual type/pattern/enum
+    values from the full schema to copy into its own SchemaField.
+    """
     base = context.full[model.inherits.root]
     format_value = model.format.root if model.format else None
     return SchemaField(
@@ -90,8 +105,11 @@ def build_field_ref(
 ) -> SchemaRef:
     """Build a SchemaRef with field-level metadata annotations.
 
-    Used when the inner type is shared ($defs) — metadata attaches
-    as sibling keywords alongside $ref.
+    When a field's inner type was promoted to $defs, context.built holds
+    a SchemaRef instead of the inline schema. Field metadata (title,
+    description, default, const, min_length, semantic, constraint) must
+    be carried as sibling keywords alongside $ref — JSON Schema allows
+    this and validators merge them at evaluation time.
     """
     default_value = field_model.default.root if field_model.default else None
     const_value = field_model.const.root if field_model.const else None
@@ -103,7 +121,11 @@ def build_field_ref(
 
 
 def build_tuple(model: BaseModel, context: BuildContext) -> SchemaTupleArray:
-    """Tuple -> {prefixItems, items: false}."""
+    """Tuple -> fixed-length array with prefixItems (JSON Schema 2020-12).
+
+    items=false (set on SchemaTupleArray) forbids additional items beyond
+    the prefix. min_items=max_items=len(prefix) enforces exact length.
+    """
     prefix = tuple(context.built[item.root] for item in model.items.root)
     return SchemaTupleArray(
         title=model.title.root,

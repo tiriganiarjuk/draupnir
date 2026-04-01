@@ -18,6 +18,8 @@ from draupnir.logic.pure.graph_build.simple import (
     edge_ref_to_attrs,
     has_zone_fields,
     is_cache_ref,
+)
+from draupnir.logic.pure.unwrap.simple import (
     unwrap_ref_value,
     unwrap_zone_dict,
 )
@@ -25,10 +27,14 @@ from draupnir.structure.config.edge_ref import EdgeRef
 
 
 def root_model_children(model: RootModel) -> list[BaseModel | str]:
-    """Unwrap a RootModel and return inspectable children.
+    """Branch on the three shapes RootModel.root can take in generated models.
 
-    Handles the three root shapes: dict (zone dicts), list/tuple
-    (items, members), or single value (ref string, nested model).
+    Dict: zone dicts map field names to ref wrappers — yield all values.
+    List/tuple: ordered collections (items, members) — yield all elements.
+    Single value: a direct ref string or nested model — yield as one-item list.
+
+    Type-checks each value before yielding because dicts/lists may also
+    contain None entries from optional fields.
     """
     root = model.root
     if isinstance(root, dict):
@@ -41,11 +47,13 @@ def root_model_children(model: RootModel) -> list[BaseModel | str]:
 
 
 def extract_refs(model: BaseModel) -> list[str]:
-    """Extract all cache ref strings from a generated input model.
+    """Walk the model tree iteratively via an explicit stack to find all cache ref strings.
 
-    Stack-based walk: for each model, get children (unwrapping RootModel
-    or iterating BaseModel fields), then classify each child as string
-    ref (collect) or nested model (push to stack).
+    Uses a stack rather than recursion because the model tree depth is
+    unbounded (RootModel nesting can be arbitrary). Each node is either
+    a RootModel (unwrap via root_model_children) or a BaseModel (iterate
+    via base_model_children). Children that are strings get tested as
+    cache refs; children that are models get pushed for further traversal.
     """
     refs: list[str] = []
     stack: list[BaseModel] = [model]
@@ -65,11 +73,12 @@ def extract_refs(model: BaseModel) -> list[str]:
 
 
 def find_zone_sets(model: BaseModel) -> list[BaseModel]:
-    """Find all zone sets in a model (the model itself + zone-having fields).
+    """Locate zone sets at both the model level and within its fields.
 
-    Zone sets have required/optional/conditional structure. A model may
-    itself be a zone set, and may also contain zone set fields (e.g.,
-    a schema model with a sections zone set as a field value).
+    A group model IS a zone set (it has required/optional/conditional).
+    A section model CONTAINS a zone set (its .containers field is one).
+    Both patterns need to be found so extract_model_refs can walk
+    every zone dict for ref extraction with proper zone annotation.
     """
     sets: list[BaseModel] = []
     if has_zone_fields(model):
@@ -85,10 +94,13 @@ def extract_zone_dict_refs(
     zone_name: str,
     cache_keys: set[str],
 ) -> list[EdgeRef]:
-    """Extract EdgeRefs from a required or optional zone dict.
+    """Unwrap a required or optional zone dict and produce an EdgeRef per entry.
 
-    Unwraps the zone RootModel to its dict, then unwraps each entry
-    to its cache key string. Returns an EdgeRef per valid ref.
+    Two layers of unwrapping: the zone itself is RootModel[dict | None],
+    and each dict value is RootModel[str] wrapping a cache key. Both
+    layers are handled by the simple-level unwrap helpers. Entries whose
+    cache key doesn't exist in the cache are silently skipped (defensive
+    against partial loads).
     """
     zone_dict = unwrap_zone_dict(zone_wrapper)
     if zone_dict is None:
@@ -105,11 +117,13 @@ def extract_conditional_refs(
     cond_wrapper: RootModel | None,
     cache_keys: set[str],
 ) -> list[EdgeRef]:
-    """Extract EdgeRefs from a conditional zone dict.
+    """Unwrap a conditional zone dict and produce EdgeRefs with when-conditions.
 
-    Conditional entries have a .ref field plus when-condition fields
-    (only_when, always_when, not_when). Returns an EdgeRef per valid
-    conditional ref, carrying the raw when-condition values.
+    Three layers of unwrapping: the zone is RootModel[dict | None], each
+    dict value is RootModel[ConditionalEntry], and the entry's .ref is
+    RootModel[str]. The when-condition fields (only_when/always_when/not_when)
+    are preserved as raw RootModel values on the EdgeRef — they're adapted
+    to canonical ConditionalWhen later by pure/cross_section at collection time.
     """
     cond_dict = unwrap_zone_dict(cond_wrapper)
     if cond_dict is None:
@@ -135,12 +149,15 @@ def extract_model_refs(
     model: BaseModel,
     cache_keys: set[str],
 ) -> list[EdgeRef]:
-    """Extract all EdgeRefs from a model, zone-aware where applicable.
+    """Combine zone-aware extraction with fallback flat extraction.
 
-    For models with zone sets: extracts refs from required/optional/conditional
-    zones with metadata. For remaining refs (direct fields like atom.pattern):
-    adds with zone="direct". Zone refs take precedence — a ref found via zone
-    extraction is not duplicated as a direct ref.
+    First pass: find all zone sets and extract refs with zone annotations
+    (required/optional/conditional). Second pass: run extract_refs for a
+    flat walk — any ref NOT already found via zones gets zone="direct".
+
+    This two-pass approach ensures fields outside zone sets (e.g.,
+    atom.pattern, field.type) still get edges, while zone-managed refs
+    carry their zone metadata for assembly and conditional collection.
     """
     refs: list[EdgeRef] = []
     zone_targets: set[str] = set()
@@ -163,10 +180,13 @@ def extract_model_refs(
 
 
 def subtree_build_order(root_key: str, graph: nx.DiGraph) -> list[str]:
-    """Return non-schema descendants of root_key in reverse topological order.
+    """Filter the global topological sort to just this root's subtree.
 
-    Includes root_key itself if it's not a schema node. Used to determine
-    the build order for per-schema and per-fragment compilation.
+    Uses nx.descendants to find the reachable subgraph, then intersects
+    with the reversed topological sort to get leaf-first build order.
+    Includes root_key itself (needed for fragment compilation where the
+    root is the built node). Excludes schema-level nodes because schemas
+    are assembled separately after all their children are built.
     """
     descendants = nx.descendants(graph, root_key) | {root_key}
     return [
@@ -176,11 +196,17 @@ def subtree_build_order(root_key: str, graph: nx.DiGraph) -> list[str]:
 
 
 def build_graph(cache: dict[str, BaseModel]) -> nx.DiGraph:
-    """Build a dependency graph from a populated cache.
+    """Two-pass construction: first add all nodes, then extract edges.
 
-    Each cache entry becomes a node with the model as an attribute.
-    Edges carry zone metadata: zone (required/optional/conditional/direct),
-    name (field name in parent dict), and for conditionals: when conditions.
+    Pass 1: each cache entry becomes a node with its model and level
+    stored as node attributes (level is derived from the cache key prefix).
+    Pass 2: extract_model_refs walks each model's zone sets and direct
+    fields to produce EdgeRefs, which are flattened to edge attributes.
+
+    The resulting DiGraph is the single source of truth for all parent-child
+    relationships, zone annotations, and when-conditions. Schema assembly,
+    $defs detection, and cross-section conditional collection all query
+    this graph rather than re-walking the input models.
     """
     graph = nx.DiGraph()
     cache_keys = set(cache.keys())

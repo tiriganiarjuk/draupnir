@@ -1,6 +1,13 @@
-"""Pipeline helpers — branching functions.
+"""Pipeline helpers — path resolution and workspace discovery.
 
-CC=2-3 helpers with iteration or branching.
+CC=2-3 helpers. Handle the three ways paths can be specified:
+1. Explicit CLI args (--verdandi-dir, --output-dir)
+2. Project-relative under workspace (--project)
+3. Auto-discovered workspace root (walk up from draupnir's location)
+
+find_workspace_root walks up the directory tree looking for a parent
+that contains a verdandi/ subdirectory — this is the convention for
+the .ai workspace structure where draupnir and verdandi are siblings.
 """
 
 from pathlib import Path
@@ -33,9 +40,10 @@ def context_to_paths(context: PipelineContext) -> tuple[Path, Path]:
 def find_workspace_root(start: Path) -> Path | None:
     """Find the workspace root by walking up from a starting path.
 
-    Draupnir and verdandi are sibling projects under a common root.
-    Walks up from start looking for an ancestor that contains verdandi/.
-    Returns None if not found.
+    The .ai workspace convention places draupnir and verdandi as siblings
+    under a common root (e.g., ~/.ai/smidja/). Walks up from start
+    looking for an ancestor that contains a verdandi/ subdirectory.
+    Returns None if not found — caller must then require explicit paths.
     """
     for parent in start.parents:
         if (parent / "verdandi").is_dir():

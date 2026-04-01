@@ -1,7 +1,12 @@
-"""Schema assembly — document assembly from compiled graph results.
+"""Schema assembly — SchemaDocument construction from compiled graph results.
 
-CC=1-2 assemblers. Thin compositor that queries graph edges
-and assembles a SchemaDocument from compiled results.
+CC=1-2. Thin compositor that delegates property collection to composed.py
+(graph edge queries) and packages the result into a SchemaDocument with
+metadata from the input model (title, description).
+
+Cross-section conditionals (allOf) are NOT wired here — they're applied
+at the orchestrate level via model_copy because computing them requires
+graph traversal across the pure/cross_section zone boundary.
 """
 
 import networkx as nx
@@ -20,11 +25,11 @@ def assemble_schema(
     context: BuildContext,
     defs: dict[str, BaseModel],
 ) -> SchemaDocument:
-    """Assemble a SchemaDocument from a compiled schema model.
+    """Wire graph-based property collection into a SchemaDocument.
 
-    Queries graph edges from this schema node to its section successors.
-    Edge attrs carry zone (required/optional) and name (property key).
-    Cross-section conditionals (allOf) are applied at the orchestrate level.
+    The schema_id includes ".schema.json" suffix for compatibility with
+    the established output format. Title and description are accessed
+    via .root because the input model wraps them in RootModel[str].
     """
     properties, required_keys = collect_graph_section_properties(
         cache_key, graph, context,

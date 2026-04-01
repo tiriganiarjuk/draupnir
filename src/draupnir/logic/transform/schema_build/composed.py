@@ -1,8 +1,16 @@
 """Schema building — composed builders.
 
-CC=4-8 builders. Multi-branch functions that combine context lookups
-with conditional construction. Handles types where generated input
-models require multiple RootModel unwraps and context.full lookups.
+CC=4-8 builders. Handle types where the generated input model requires
+multiple RootModel unwrap layers combined with context lookups.
+
+build_atom is the most complex primitive type: it resolves pattern from
+a separate pattern model (via context.full ref lookup), optionally builds
+an excludes constraint (NOT clause with one or more patterns), and extracts
+min_length — all from separately wrapped RootModel fields.
+
+build_excludes converts pattern refs into JSON Schema "not" constraints.
+A single exclude becomes not:{pattern:...}; multiple become
+not:{anyOf:[{pattern:...}, ...]}.
 """
 
 from pydantic import BaseModel, RootModel
@@ -19,7 +27,13 @@ def build_excludes(
     exclude_refs: list[RootModel],
     context: BuildContext,
 ) -> SchemaPatternConstraint | SchemaAnyOfConstraint:
-    """Convert exclude pattern refs to JSON Schema not constraint."""
+    """Convert exclude pattern refs to JSON Schema "not" constraint.
+
+    Each ref points to a pattern model in context.full whose .pattern
+    field holds the regex string. Single pattern → SchemaPatternConstraint
+    (renders as not:{pattern:...}). Multiple → SchemaAnyOfConstraint
+    wrapping each pattern (renders as not:{anyOf:[{pattern:...}, ...]}).
+    """
     patterns = [context.full[pattern_ref.root].pattern for pattern_ref in exclude_refs]
     if len(patterns) == 1:
         return SchemaPatternConstraint(pattern=patterns[0])
@@ -32,10 +46,13 @@ def build_excludes(
 
 
 def build_atom(model: BaseModel, context: BuildContext) -> SchemaField:
-    """Atom -> {type, pattern?, minLength?, not?, description}.
+    """Atom -> SchemaField with optional pattern, minLength, and not constraint.
 
-    Destructures pattern and excludes from context.full because the
-    input model holds string refs, not resolved model instances.
+    Atoms are the leaf value types in Verdandi (string, integer, boolean,
+    number). The pattern and excludes fields are string refs to separate
+    pattern-level models — resolved via context.full to get the actual
+    regex strings. This indirection exists because patterns are shared
+    across atoms and may appear in $defs.
     """
     pattern = context.full[model.pattern.root].pattern if model.pattern else None
     excludes_list = model.excludes.root if model.excludes else None

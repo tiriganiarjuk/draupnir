@@ -1,9 +1,18 @@
 """Field annotation — metadata application.
 
-CC=4-8 functions. Applies field-level metadata to JSON Schema nodes
-and computes field metadata from built inner schemas.
+CC=4-8 functions that apply Verdandi field-level metadata onto built
+JSON Schema nodes. The complexity comes from the two application paths:
 
-No IO. Pure model-to-model conversion.
+apply_inline_metadata: patches an inline schema via model_copy(update=...).
+  Different schema types accept different subsets of metadata — SchemaField
+  gets min_length/const/default, SchemaArray gets semantic/constraint,
+  SchemaOneOfField gets default only. The isinstance branches gate this.
+
+compute_field_metadata: assembles a FieldMeta from the field model and
+  its resolved inner type schema. This is where description concatenation,
+  min_length override resolution, and semantic/constraint conversion
+  all happen — producing a single FieldMeta that both apply_inline_metadata
+  and build_field_ref (simple.py) consume.
 """
 
 from pydantic import BaseModel
@@ -36,8 +45,12 @@ def apply_inline_metadata(
 ) -> BaseModel:
     """Apply field metadata to an inline (non-$ref) schema node.
 
-    field_model is a generated VerdandiField input model with RootModel
-    wrapper fields (.title.root, .default.root, .const.root).
+    Uses model_copy(update=...) to non-destructively add field-level
+    metadata to the already-built inner schema. The isinstance branches
+    gate which updates apply to which schema types:
+    - SchemaField/SchemaOneOfField: can carry defaults
+    - SchemaField only: can carry min_length and const overrides
+    - SchemaField/SchemaArray: can carry semantic and constraint extensions
     """
     default_value = field_model.default.root if field_model.default else None
     field_const = unwrap_string_or_none(field_model.const)
@@ -57,10 +70,17 @@ def compute_field_metadata(
     field_model: BaseModel,
     inner_schema: BaseModel,
 ) -> FieldMeta:
-    """Compute description, min_length override, semantic, and constraint.
+    """Compute combined field metadata from the field model and its type schema.
 
-    field_model: generated VerdandiField input model
-    inner_schema: context.full[field.type.root] — the built type schema
+    Assembles a FieldMeta by resolving the interaction between field-level
+    and type-level properties:
+    - Description: concatenated (field first, type second) unless identical
+    - min_length: field value only overrides when it exceeds the type floor
+    - Semantic: converted from Verdandi SemanticBlock to SchemaSemanticExt
+    - Constraint: converted from Verdandi ConstraintRules to SchemaConstraintBlock
+
+    inner_schema is context.full[field.type.root] — the complete built schema
+    for the referenced type, needed for its description and min_length values.
     """
     field_description = field_model.description.root
     type_desc = inner_schema.description if hasattr(inner_schema, "description") else None

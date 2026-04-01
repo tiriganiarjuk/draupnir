@@ -1,8 +1,14 @@
 """Same-section conditional schema building — branching builders.
 
-CC=1-3. Builds if/then/else from conditional when values for
-same-section entries. Cross-section conditionals (dotted field paths)
-are handled in logic/pure/cross_section/.
+CC=1-3. Called during schema_build to produce SchemaConditional nodes
+for fields with when-conditions that reference fields in the SAME section.
+Cross-section conditionals (field paths starting with ".") are filtered
+out here and handled separately by pure/cross_section/ at graph traversal time.
+
+The entry point is build_conditional_entry, called by zone_collect/composed.py
+for each conditional zone dict entry. It resolves which when is active,
+gates on same-section, builds the if-clause, and dispatches to the
+appropriate primitive builder based on mode.
 """
 
 from draupnir.logic.transform.conditional_build.primitive import (

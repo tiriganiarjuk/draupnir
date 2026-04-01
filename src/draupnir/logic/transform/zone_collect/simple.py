@@ -33,3 +33,16 @@ def build_zone_properties(
     if not zone:
         return {}
     return {name: context.built[item_ref.root] for name, item_ref in zone.items()}
+
+
+def unwrap_when_equals(when_inner: BaseModel) -> str | int | bool | None:
+    """Extract equals value from a generated ConditionalWhen inner model."""
+    return when_inner.equals.root if when_inner.equals else None
+
+
+def unwrap_when_in_values(
+    when_inner: BaseModel,
+) -> tuple[str | int | bool, ...] | None:
+    """Extract in_ values as tuple from a generated ConditionalWhen inner model."""
+    values_list = when_inner.in_.root if when_inner.in_ else None
+    return tuple(values_list) if values_list else None

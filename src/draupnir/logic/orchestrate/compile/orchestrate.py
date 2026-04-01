@@ -397,7 +397,7 @@ def resolve_context(args: PipelineArgs) -> PipelineContext | str:
     verdandi, output = result
     return PipelineContext(
         mode=mode,
-        verdanni=str(verdandi),
+        verdandi=str(verdandi),
         output=str(output),
     )
 

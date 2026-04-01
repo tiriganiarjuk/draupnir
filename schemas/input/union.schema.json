@@ -1,0 +1,59 @@
+{
+  "$defs": {
+    "Atom": {
+      "type": "string"
+    },
+    "AtomOrEnumRef": {
+      "type": "string"
+    },
+    "Element": {
+      "type": "string"
+    },
+    "Enum": {
+      "type": "string"
+    },
+    "FieldRef": {
+      "type": "string"
+    },
+    "Pattern": {
+      "type": "string"
+    },
+    "PatternRef": {
+      "type": "string"
+    },
+    "Tuple_": {
+      "type": "string"
+    },
+    "UnionMemberRef": {
+      "type": "string"
+    },
+    "Union_": {
+      "description": "OneOf composition of field-level models.",
+      "properties": {
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "union": {
+          "items": {
+            "$ref": "#/$defs/UnionMemberRef"
+          },
+          "title": "Union",
+          "type": "array"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "union",
+        "description"
+      ],
+      "title": "Union_",
+      "type": "object"
+    }
+  },
+  "$ref": "#/$defs/Union_"
+}

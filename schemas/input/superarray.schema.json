@@ -1,0 +1,651 @@
+{
+  "$defs": {
+    "Array": {
+      "type": "string"
+    },
+    "ArrayOneOf": {
+      "description": "OneOf composition for array items \u2014 multiple simplegroup options.",
+      "properties": {
+        "oneOf": {
+          "items": {
+            "$ref": "#/$defs/SimplegroupRef"
+          },
+          "title": "Oneof",
+          "type": "array"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        }
+      },
+      "required": [
+        "oneOf"
+      ],
+      "title": "ArrayOneOf",
+      "type": "object"
+    },
+    "Atom": {
+      "type": "string"
+    },
+    "AtomOrEnumRef": {
+      "type": "string"
+    },
+    "ConditionalWhen": {
+      "description": "Predicate controlling conditional field presence.",
+      "properties": {
+        "field": {
+          "title": "Field",
+          "type": "string"
+        },
+        "equals": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Equals"
+        },
+        "in": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "boolean"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "In"
+        },
+        "exists": {
+          "const": true
+        }
+      },
+      "required": [
+        "field"
+      ],
+      "title": "ConditionalWhen",
+      "type": "object",
+      "oneOf": [
+        {
+          "required": [
+            "equals"
+          ]
+        },
+        {
+          "required": [
+            "in"
+          ]
+        },
+        {
+          "required": [
+            "exists"
+          ]
+        }
+      ]
+    },
+    "ConstraintRule": {
+      "description": "Cross-field validation rule carried by a field.",
+      "properties": {
+        "rule": {
+          "title": "Rule",
+          "type": "string"
+        },
+        "severity": {
+          "title": "Severity",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Field"
+        },
+        "order": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Order"
+        },
+        "in": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "In"
+        }
+      },
+      "required": [
+        "rule",
+        "severity",
+        "reason"
+      ],
+      "title": "ConstraintRule",
+      "type": "object"
+    },
+    "Element": {
+      "type": "string"
+    },
+    "Enum": {
+      "type": "string"
+    },
+    "FieldItemRef": {
+      "type": "string"
+    },
+    "FieldRef": {
+      "type": "string"
+    },
+    "FieldTypeRef": {
+      "type": "string"
+    },
+    "Group": {
+      "type": "string"
+    },
+    "GroupContainerConditionalEntry": {
+      "description": "Conditional container entry for group container zones.",
+      "properties": {
+        "ref": {
+          "$ref": "#/$defs/GroupContainerRef"
+        },
+        "only_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConditionalWhen"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "always_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConditionalWhen"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "not_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConditionalWhen"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "ref"
+      ],
+      "title": "GroupContainerConditionalEntry",
+      "type": "object",
+      "oneOf": [
+        {
+          "required": [
+            "only_when"
+          ]
+        },
+        {
+          "required": [
+            "always_when"
+          ]
+        },
+        {
+          "required": [
+            "not_when"
+          ]
+        }
+      ]
+    },
+    "GroupContainerRef": {
+      "type": "string"
+    },
+    "GroupContainers": {
+      "description": "Container zones for a group \u2014 required, optional, conditional.",
+      "properties": {
+        "required": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/GroupContainerRef"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Required"
+        },
+        "optional": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/GroupContainerRef"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Optional"
+        },
+        "conditional": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/GroupContainerConditionalEntry"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Conditional"
+        }
+      },
+      "title": "GroupContainers",
+      "type": "object"
+    },
+    "GroupFieldConditionalEntry": {
+      "description": "Conditional field entry for group field zones.",
+      "properties": {
+        "ref": {
+          "$ref": "#/$defs/GroupFieldConditionalRef"
+        },
+        "only_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConditionalWhen"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "always_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConditionalWhen"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "not_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConditionalWhen"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "ref"
+      ],
+      "title": "GroupFieldConditionalEntry",
+      "type": "object",
+      "oneOf": [
+        {
+          "required": [
+            "only_when"
+          ]
+        },
+        {
+          "required": [
+            "always_when"
+          ]
+        },
+        {
+          "required": [
+            "not_when"
+          ]
+        }
+      ]
+    },
+    "GroupFieldConditionalRef": {
+      "type": "string"
+    },
+    "GroupFields": {
+      "description": "Field zones for a group \u2014 required, optional, conditional.",
+      "properties": {
+        "required": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/FieldItemRef"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Required"
+        },
+        "optional": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/FieldItemRef"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Optional"
+        },
+        "conditional": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/GroupFieldConditionalEntry"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Conditional"
+        }
+      },
+      "title": "GroupFields",
+      "type": "object"
+    },
+    "GroupOrSimplegroupRef": {
+      "type": "string"
+    },
+    "Pattern": {
+      "type": "string"
+    },
+    "PatternRef": {
+      "type": "string"
+    },
+    "SemanticBlock": {
+      "description": "Semantic intent and validation guidance for a field.",
+      "properties": {
+        "intent": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Intent"
+        },
+        "checks": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Checks"
+        },
+        "anti_patterns": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Anti Patterns"
+        },
+        "severity": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Severity"
+        }
+      },
+      "title": "SemanticBlock",
+      "type": "object"
+    },
+    "Simplearray": {
+      "type": "string"
+    },
+    "Simplegroup": {
+      "type": "string"
+    },
+    "SimplegroupConditionalEntry": {
+      "description": "Conditional field entry for simplegroup zones.",
+      "properties": {
+        "ref": {
+          "$ref": "#/$defs/SimplegroupItemRef"
+        },
+        "only_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConditionalWhen"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "always_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConditionalWhen"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "not_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConditionalWhen"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "ref"
+      ],
+      "title": "SimplegroupConditionalEntry",
+      "type": "object",
+      "oneOf": [
+        {
+          "required": [
+            "only_when"
+          ]
+        },
+        {
+          "required": [
+            "always_when"
+          ]
+        },
+        {
+          "required": [
+            "not_when"
+          ]
+        }
+      ]
+    },
+    "SimplegroupItemRef": {
+      "type": "string"
+    },
+    "SimplegroupRef": {
+      "type": "string"
+    },
+    "SuperarrayOneOf": {
+      "description": "OneOf composition for superarray items \u2014 group/simplegroup options.",
+      "properties": {
+        "oneOf": {
+          "items": {
+            "$ref": "#/$defs/GroupOrSimplegroupRef"
+          },
+          "title": "Oneof",
+          "type": "array"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        }
+      },
+      "required": [
+        "oneOf"
+      ],
+      "title": "SuperarrayOneOf",
+      "type": "object"
+    },
+    "Tuple_": {
+      "type": "string"
+    },
+    "UnionMemberRef": {
+      "type": "string"
+    },
+    "Union_": {
+      "type": "string"
+    },
+    "VerdandiField": {
+      "type": "string"
+    }
+  },
+  "description": "Variable-length array of group or simplegroup items.\n\nItems is either a single group/simplegroup ref (string) or a oneOf\ncomposition ({oneOf: [...]}). Pydantic union matching handles both.",
+  "properties": {
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "items": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/GroupOrSimplegroupRef"
+        },
+        {
+          "$ref": "#/$defs/SuperarrayOneOf"
+        }
+      ],
+      "title": "Items"
+    },
+    "description": {
+      "title": "Description",
+      "type": "string"
+    }
+  },
+  "required": [
+    "title",
+    "items",
+    "description"
+  ],
+  "title": "Superarray",
+  "type": "object"
+}

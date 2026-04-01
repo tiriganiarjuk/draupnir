@@ -101,44 +101,86 @@ What reads draupnir's output.
 
 ## 7. Source Code Map
 
-All source files under `tools/draupnir/src/draupnir/`.
+All source files under `src/draupnir/`. Uses v2 zone architecture with level bands.
+
+**NOTE (2026-04-01):** The codebase is mid-transition to a network graph approach. All recursive dispatch code has been deleted. Pipeline modes are stubs awaiting the graph compiler. The structure below reflects the CURRENT state.
 
 ### Entry Point
 
-| File | Purpose | Key Functions/Classes |
-|------|---------|----------------------|
-| `cli.py` | CLI argument parsing and dispatch | `main()` -- entry point (defined in pyproject.toml as `draupnir.cli:main`); `build_parser()` -- argparse setup with `--all`, `--check`, `--list` modes; `find_workspace_root()` -- auto-discovers workspace by walking up looking for `tools/verdandi/` |
+| File | Purpose |
+|------|---------|
+| `cli.py` | CLI argument parsing, entry point (`draupnir.cli:main`) |
+| `logic/entry_point.py` | Delegates to orchestrate |
 
-### structures/ -- Frozen Pydantic Data Models (zero methods, `ConfigDict(frozen=True)`)
+### structure/ — Frozen Pydantic Data Models
 
-| File | Purpose | Key Classes |
-|------|---------|-------------|
-| `structures/fields.py` | Tier 1 field models and ref type aliases | `Pattern` (regex + description), `Atom` (type + pattern + excludes), `Enum` (values), `Element` (inherits atom/enum + format), `Union_` (oneOf composition). Ref aliases: `PatternRef`, `AtomOrEnumRef`, `UnionMemberRef`, `FieldRef` |
-| `structures/simple_containers.py` | Tier 2 simple container models | `Tuple_` (fixed-length typed sequence), `Simplearray` (variable-length single-type array), `Simplegroup` (flat object with required/optional/conditional zones), `SimplegroupConditionalEntry`. Ref alias: `SimplegroupItemRef` |
-| `structures/complex_containers.py` | Tier 3 complex container models | `Array` (array of simplegroups), `ArrayOneOf` (oneOf for array items), `Group` (object with fields + containers sections), `GroupFields`, `GroupContainers`, `GroupFieldConditionalEntry`, `GroupContainerConditionalEntry`, `Superarray` (array of groups/simplegroups), `SuperarrayOneOf`. Ref aliases: `SimplegroupRef`, `GroupContainerRef`, `GroupFieldConditionalRef`, `GroupOrSimplegroupRef` |
-| `structures/conditionals.py` | Conditional presence predicates | `ConditionalWhen` (field + equals/in/exists predicate for only_when/always_when/not_when blocks) |
-| `structures/top_level.py` | Tier 4 top-level and root models | `Section` (components are complex containers only), `Shallowsection` (fields + limited containers, max 2), `ShallowContainers`, `ShallowFieldConditionalEntry`, `Schema` (root: uses `SchemaSections`/`SchemaShallowsections` zone containers with required/optional/conditional zones), `SchemaSections`, `SchemaShallowsections`, `SchemaSectionConditionalEntry`, `SchemaShallowConditionalEntry`, `SectionContainerConditionalEntry`. Ref aliases: `ComplexContainerRef`, `ShallowContainerRef`, `ShallowFieldConditionalRef`, `SectionOnlyRef`, `ShallowsectionOnlyRef` |
-| `structures/levels.py` | Level enum -- load order IS declaration order | `Level` enum: pattern, enum, atom, element, union, tuple, simplearray, simplegroup, array, group, superarray, section, shallowsection, schema. Each member's value is the Pydantic model class for that level. |
-| `structures/schema_output.py` | JSON Schema output models | `SchemaDocument` (root), `SchemaObject` (groups/sections), `SchemaField` (leaf properties), `SchemaArray`, `SchemaTupleArray`, `SchemaOneOfField` (union fields), `SchemaOneOf` (polymorphic array items), `SchemaRef` ($ref pointer), `SchemaConditional`/`SchemaCondition` (if/then/else), `SchemaRootConditional`/`SchemaNestedPath` (cross-section conditionals), `SchemaConst`, `SchemaEnumConstraint`, `ValidationConstraint`, `SchemaNotBlock`, `SchemaSemanticExt`, `SchemaConstraintBlock` |
+| File | Purpose |
+|------|---------|
+| `structure/model/fields.py` | Tier 1: Pattern, Atom, Enum, Element, Union_ + ref type aliases |
+| `structure/model/simple_containers.py` | Tier 2: VerdandiField, Tuple_, Simplearray, Simplegroup |
+| `structure/model/complex_containers.py` | Tier 3: Array, Group, Superarray + supporting types |
+| `structure/model/top_level.py` | Tier 4: Section, Shallowsection, Schema + zone containers |
+| `structure/model/conditionals.py` | ConditionalWhen predicates |
+| `structure/model/field.py` | SemanticBlock, ConstraintRule |
+| `structure/model/schema_output.py` | JSON Schema output models (SchemaDocument, SchemaField, SchemaObject, SchemaRef, etc.) |
+| `structure/config/levels.py` | Level enum — level name → model class mapping |
+| `structure/config/fragments.py` | Fragment enum — output names → cache keys |
+| `structure/config/pipeline.py` | PipelineMode, PipelineArgs, PipelineContext |
 
-### functions/pure/ -- No IO, No Side Effects
+### logic/impure/ — IO boundary
 
-| File | Purpose | Key Functions |
-|------|---------|---------------|
-| `functions/pure/pydantic_validators.py` | Shared ref conversion for Verdandi YAML references | `ref_from_cache(value, info)` -- BeforeValidator that converts string refs like `"atom/kebab_string"` to cached Pydantic models during model_validate(). Pass-through for models handles test cases. |
-| `functions/pure/build_fields.py` | Field-level and simple container builders (always inlined, never $defs candidates) | `build_atom()`, `build_enum()`, `build_element()`, `build_union()`, `build_field()` (dispatch by type), `build_tuple()`, `build_simplearray()`, `build_simple()` (dispatch for fields + simple containers), `build_simplegroup()`, `build_if_condition()`, `build_conditional_entry()` |
-| `functions/pure/build_containers.py` | Complex container and top-level builders with $defs tracking | `build_or_ref()` (build inline or emit $ref for shared models), `build_model()` (dispatch any Verdandi model), `build_array()`, `build_superarray()`, `build_group_properties()`, `build_group()`, `build_section()`, `build_shallowsection()`, `defs_key()` (cache key to $defs key conversion) |
-| `functions/pure/exporter.py` | SchemaDocument assembly and export | `build_schema_properties()` (top-level properties from zone primitives), `collect_schema_zone_conditionals()`, `merge_all_conditionals()`, `export_schema()` (complete SchemaDocument assembly), `export_fragment()`, `export_all_schemas()` (batch export) |
-| `functions/pure/tree_walk.py` | Tree walk and shared node detection | `reverse_cache_index()` (id(model) -> cache_key mapping), `iter_child_models()` (generic Pydantic field iteration), `count_refs()` (iterative tree walk counting occurrences for $defs detection), `shared_keys()` (frozenset of keys appearing 2+ times), `wrap_array_as_object()` |
-| `functions/pure/collect_cross_section.py` | Cross-section conditional collectors | `collect_section_conditionals()`, `iter_schema_sections()`, `collect_schema_conditionals()` |
+| File | Purpose |
+|------|---------|
+| `logic/impure/loader/ffi.py` | Gate FFI wrapper — `gate_validate(file_path, level_name, schema_dir)` |
+| `logic/impure/loader/primitive.py` | Path/string helpers: `parse_cache_key`, `level_file_path`, `level_model` |
+| `logic/impure/dispatch/primitive.py` | `cache_key_to_defs_key` — string transform for $defs naming |
+| `logic/impure/pipeline/primitive.py` | Output naming: `schema_filename`, `fragment_output_name` |
+| `logic/impure/pipeline/simple.py` | Path resolution: `args_to_paths`, `find_workspace_root` |
+| `logic/impure/pipeline/composed.py` | `resolve_paths` |
+| `logic/impure/writer/primitive.py` | `serialize_schema` — model_dump_json boundary |
+| `logic/impure/writer/simple.py` | `write_schema` — file write |
 
-### functions/impure/ -- File IO (exactly 2 impure files + orchestrator)
+### logic/transform/ — Pure model-to-model conversion
 
-| File | Purpose | Key Functions |
-|------|---------|---------------|
-| `functions/impure/loader.py` | Supply-driven YAML loader (the ONLY file reader) | `load_file()` (load single YAML into cache via level's model_validate), `try_load_file()` (error-catching wrapper), `load_all_levels()` (iterate Level enum in order, glob each directory, populate cache bottom-up) |
-| `functions/impure/writer.py` | JSON serialization + file writing + HTML sidecar generation (the ONLY file writer) | `serialize_schema()` (model_dump_json called here and NOWHERE ELSE), `write_schema()` (write JSON to disk), `load_inspect_schema()` (dynamic import of tools/inspect_schema.py), `write_sidecar()` (generate HTML sidecar) |
-| `functions/impure/pipeline.py` | Orchestration: load, export, write | `resolve_paths()` (verdandi + output directory resolution), `schema_filename()` (cache key to output filename), `run_all()` (default: load + export + write all schemas + sidecars), `run_check()` (drift detection without writing), `run_list()` (print available schemas) |
+| File | Purpose |
+|------|---------|
+| `logic/transform/schema_build/primitive.py` | `build_enum`, `build_simplearray` — uses `built` dict |
+| `logic/transform/schema_build/simple.py` | `build_atom`, `build_element`, `build_union`, `build_array`, `build_superarray`, `build_tuple` — all use `built` dict |
+| `logic/transform/schema_build/assembled.py` | `build_simplegroup`, `build_group`, `build_section`, `build_shallowsection` — all use `built` dict |
+| `logic/transform/zone_collect/simple.py` | `collect_required_optional`, `build_zone_properties` — uses `built` dict |
+| `logic/transform/zone_collect/composed.py` | `collect_conditional` — uses `built` dict |
+| `logic/transform/conditional_build/primitive.py` | `build_only_when`, `build_always_when`, `build_not_when`, path parsing |
+| `logic/transform/conditional_build/simple.py` | `dispatch_when_builder`, `build_conditional_entry`, nested conditional builders |
+| `logic/transform/conditional_build/composed.py` | `collect_group_conditionals`, `collect_section_conditionals`, `iter_schema_sections` |
+| `logic/transform/field_annotate/simple.py` | Field metadata computation |
+| `logic/transform/field_annotate/composed.py` | `apply_inline_metadata` |
+
+### logic/orchestrate/ — Wiring layer
+
+| File | Purpose |
+|------|---------|
+| `logic/orchestrate/compile/dispatch.py` | Type → builder routing table (5 types currently) |
+| `logic/orchestrate/compile/orchestrate.py` | **STUB** — CLI routing intact, pipeline modes return error pending graph compiler |
+
+### logic/pure/ — Empty, awaiting graph code
+
+The `pure/` zone directory exists but is empty after cleanup. The network graph implementation will live here.
+
+### DELETED (2026-04-01 cleanup)
+
+These directories/files were removed because they implement the old recursive dispatch approach:
+- `logic/transform/ref_resolve/` — dict-walking `resolve_refs`
+- `logic/pure/tree_walk/` — `reverse_cache_index`, `count_refs`, `shared_keys`, `iter_child_models`
+- `logic/impure/loader/assembled.py` — yaml.safe_load + resolve_refs + model_validate
+- `logic/impure/loader/composed.py` — level-ordered iteration with Callable DI
+- `logic/transform/schema_build/composed.py` — recursive dispatch functions
+- `logic/transform/field_annotate/assembled.py` — Callable-based field builder
+
+### tools/
+
+| File | Purpose |
+|------|---------|
+| `tools/export_input_schemas.py` | Export 15 input validation schemas from Pydantic models (ref→string transform) |
 
 ---
 
@@ -148,57 +190,46 @@ For an LLM mid-session that needs to refresh specific understanding.
 
 | If You Need To Understand... | Read This |
 |------------------------------|-----------|
-| The loading pipeline (supply-driven, level-ordered, BeforeValidator ref conversion) | `tools/draupnir/QUICKSTART.md` "The Loading Pipeline" section; or `context/draupnir.md` "Phase 1: Loading" |
-| The export pipeline ($defs detection, tree walk, SchemaDocument assembly) | `context/draupnir.md` "Phase 2: Exporting"; source: `functions/pure/exporter.py` |
-| The Verdandi hierarchy as draupnir sees it (15 levels, 4 tiers, tier containment) | `context/draupnir.md` "Verdandi Composition Hierarchy" tables; `tools/verdandi/COMPOSITION_RULES.md` |
-| Pure/impure separation (why IO is in exactly 2 files) | `tools/draupnir/CLAUDE.md` "IO Externalization" section; `tools/draupnir/QUICKSTART.md` "Two-Boundary IO Design" |
-| Design rationale and history (why the rebuild happened, what changed) | `tools/draupnir/DRAUPNIR_REDESIGN.md` sections 1-6; `documentation/toolcompose/WHY_SCHEMA_COMPOSITION_IS_THE_KEY.md` |
-| Anti-patterns and failure modes (what NOT to do) | `tools/draupnir/CLAUDE.md` "You Will Get These Things Wrong" (13 items); `tools/draupnir/QUICKSTART.md` "What NOT to Do" |
-| How draupnir fits in the end-to-end pipeline (schema generation -> nornir -> transform) | `definitions/TOOL_BUILDING.md` section "Stage 0: Schema Generation"; `context/draupnir.md` "Relationship to Other Tools" |
-| Design decisions D1-D11 (requirement model, capability model, security, dispatch) | `context/draupnir.md` "From CRITICAL_DECISIONS.md" enrichment section; source: `documentation/pipeline/CRITICAL_DECISIONS.md` |
-| Ref type aliases and tier enforcement (how typed unions enforce hierarchy) | `context/draupnir.md` "Ref Type Aliases"; source: each `structures/*.py` module's type alias definitions |
-| The $defs/$ref mechanism (shared node detection, $defs population) | `context/draupnir.md` "The $defs/$ref mechanism"; source: `functions/pure/build_containers.py` `build_or_ref()` |
-| Schema output models (what JSON Schema shapes are produced) | Source: `structures/schema_output.py` (SchemaDocument, SchemaObject, SchemaField, etc.) |
-| Gleipnir constraints and guardrail discipline | `tools/draupnir/CLAUDE.md` "Gleipnir" section and "Gleipnir as Diagnostic: Redirect vs Blocker" |
-| LLM mistake patterns specific to this codebase | `documentation/toolcompose/SCHEMA_COMPOSITION_EXPLAINED_BY_LLM_FOR_LLM.md` (5 documented mistakes with corrections) |
+| Why recursive dispatch was wrong and what replaces it | `src/draupnir/WHY_NETWORK_GRAPHS_ARE_THE_SOLUTION.md` |
+| What failed approaches to avoid | `src/draupnir/WHY_WE_KEEP_GETTING_STUCK.md` |
+| How to recover when stuck | `src/draupnir/HOW_TO_GET_UNSTUCK.md` |
+| The gate architecture (file validation boundary) | nornir memory: `project_draupnir_input_gates.md` |
+| The graph architecture (topological sort, in-degree, $defs) | nornir memory: `project_draupnir_graph_architecture.md` |
+| The Verdandi hierarchy (15 levels, 4 tiers, tier containment) | `DRAUPNIR_REDESIGN.md` §1-§4; `tools/verdandi/COMPOSITION_RULES.md` |
+| Design rationale (why the rebuild happened, what changed) | `DRAUPNIR_REDESIGN.md` §1-§6 |
+| Schema output models (JSON Schema shapes produced) | `structure/model/schema_output.py` |
+| Existing builders (already converted to `built` dict) | `logic/transform/schema_build/simple.py`, `assembled.py` |
+| Regin model generation pattern (for generated input models) | `~/.ai/smidja/regin/src/regin/generate_structures.py`, `codegen_schemas.toml` |
+| Pure/impure separation | `CLAUDE.md` "IO Externalization" section |
+| Anti-patterns and failure modes | `CLAUDE.md` "You Will Get These Things Wrong" |
+| Gleipnir constraints and guardrail discipline | `CLAUDE.md` "Gleipnir" section |
 
 ---
 
 ## 9. Known Issues / Active Work
 
-### From Discrepancy Alerts (`context/discrepancy_ALERT_draupnir.md`)
+### Active: Network Graph Architecture (2026-04-01)
 
-**ALERT 1: `tools/agent_schema.py` still exists on disk.** The 1710-line predecessor file is described as "replaced by draupnir" in multiple documents but has not been deleted or marked as deprecated. It has a working PEP 723 shebang and could be executed. Resolution: ask user whether intentional retention or overlooked deletion.
+The codebase is mid-transition. All recursive dispatch code has been deleted. Pipeline modes are stubs. The next step is implementing the network graph compiler:
 
-**ALERT 2: Quick Reference table uses old level names.** The "Quick Reference: When to Do What" table in `documentation/toolcompose/SCHEMA_COMPOSITION_EXPLAINED_BY_LLM_FOR_LLM.md` maps actions to old directory names (`primitives/`, `composed/`, `supergroups/`, `superarrays/`) instead of current Verdandi names. An LLM following it literally would target non-existent directories. The document header has been annotated, but the table itself remains stale.
+1. **Generated input models** — generate Pydantic models from input schemas (Regin pattern with `datamodel-code-generator`)
+2. **New loader** — gate reads file → JSON → `model_validate_json` with generated input models → cache
+3. **Graph builder** — NetworkX DiGraph from cache, string refs = edges, models = node attributes
+4. **Graph compiler** — topological sort → walk in order → dispatch to existing builders → `built` dict → $defs from in-degree >= 2
+5. **Schema export** — assemble SchemaDocument from graph output
 
-**ALERT 3: CRITICAL_DECISIONS.md D3 references "8-level hierarchy".** The D3 design decision (mandatory propagation, fail-and-report) still says "build schema from 8-level hierarchy" when draupnir now loads 15 levels. The principle is correct regardless of level count; the reference is historically accurate but factually stale.
+See `src/draupnir/WHY_NETWORK_GRAPHS_ARE_THE_SOLUTION.md` for full rationale.
 
-### From Reconciliation Log (2026-02-26)
+### Gate system
 
-Seven documentation files were consulted during reconciliation:
-- 7 enrichments added to `context/draupnir.md` (one per source document)
-- 7 stale documentation items fixed (level counts updated, architecture descriptions rewritten)
-- All fixes are noted in the reconciliation log at the bottom of `context/draupnir.md`
+The Rust PyO3 gate (`nornir/gates/gate_verdandi_input/`) is built and working. It reads YAML files, validates against JSON Schema, returns JSON strings. 15 input schemas exported to `schemas/input/`. The gate output JSON is currently discarded — the new loader will use it directly via `model_validate_json`.
 
-**ALERT 4: test_pipeline.py assertions are stale.** `EXPECTED_SCHEMA_COUNT = 12` but actual schema count is 13 (agent-anthropic-render added). The expected levels set in `test_all_levels_represented` is missing `"field"`. Both tests currently FAIL. See `context/discrepancy_ALERT_draupnir.md`.
+### Stale documentation alerts
 
-### Pipeline Status
+**ALERT 1:** `tools/agent_schema.py` still on disk (1710-line predecessor). Ask user about retention.
+**ALERT 2:** Quick Reference table in `SCHEMA_COMPOSITION_EXPLAINED_BY_LLM_FOR_LLM.md` uses old directory names.
+**ALERT 3:** CRITICAL_DECISIONS.md D3 references "8-level hierarchy" (now 15 levels).
 
-Per `documentation/pipeline/CRITICAL_DECISIONS.md`: 12 of 13 next-step items completed. Item 12 ("Update existing agent definition JSON files for new schema structure") remains open. Item 13 (resolver/generator integration) is in progress with the full nornir-gated pipeline.
+### COMPLETED: Schema Zone Unification
 
-### COMPLETED REFACTOR: Schema Zone Unification
-
-Three changes completed (historical reference: `tools/verdandi/PLAN_SCHEMA_ZONE_UNIFICATION.md`):
-1. **Schema model gets required/optional/conditional zones** — `Schema` model lost `required` and `nullable` fields, gained `SchemaSections`/`SchemaShallowsections` zone containers. Nullable wrapping removed from exporter.
-2. **Presence-based conditionals** — `ConditionalWhen` gained `exists` field. `build_if_condition` and `build_if_nested` emit `required` in `if` clause instead of `const`/`enum`.
-3. **Leading-dot cross-section paths** — `is_cross_section` changed from `"." in field` to `field.startswith(".")`. `build_if_nested` strips leading dot.
-
-Key draupnir files changed:
-- `structures/top_level.py` — Schema model, new zone container types, new conditional entry types
-- `structures/conditionals.py` — ConditionalWhen gained `exists` predicate
-- `structures/schema_output.py` — SchemaNullableObject/SchemaNullType removed
-- `functions/pure/converters/conditional.py` — `build_if_condition` handles `exists`
-- `functions/pure/build_cross_section.py` — `build_if_nested` handles `exists`, `is_cross_section` updated
-- `functions/pure/collect_cross_section.py` — cross-section conditional collectors, extracted from build_cross_section.py
-- `functions/pure/exporter.py` — `build_schema_properties` uses zone primitives, nullable wrapping removed
+Schema model uses `SchemaSections`/`SchemaShallowsections` zone containers. ConditionalWhen has `exists` field. Leading-dot cross-section path detection. Nullable wrapping removed.

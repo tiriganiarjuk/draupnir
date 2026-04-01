@@ -26,3 +26,8 @@ def level_file_path(root: Path, level_name: str, name: str) -> Path:
 def level_model(level_name: str) -> type:
     """Return the Pydantic model class for a level."""
     return Level[level_name].value
+
+
+def schema_dir_path() -> str:
+    """Return the path to the input schema directory."""
+    return str(Path(__file__).resolve().parent.parent.parent.parent.parent.parent / "schemas" / "input")

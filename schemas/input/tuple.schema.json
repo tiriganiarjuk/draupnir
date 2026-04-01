@@ -1,0 +1,71 @@
+{
+  "$defs": {
+    "Atom": {
+      "type": "string"
+    },
+    "AtomOrEnumRef": {
+      "type": "string"
+    },
+    "Element": {
+      "type": "string"
+    },
+    "Enum": {
+      "type": "string"
+    },
+    "FieldRef": {
+      "type": "string"
+    },
+    "Pattern": {
+      "type": "string"
+    },
+    "PatternRef": {
+      "type": "string"
+    },
+    "Tuple_": {
+      "description": "Fixed-length typed sequence \u2014 type composition, not a container.\n\nItems reference type-tier models (atom, enum, element, union).\nDefined before Union_ so unions can reference tuples.",
+      "properties": {
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/FieldRef"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "constraint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Constraint"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "items",
+        "description"
+      ],
+      "title": "Tuple_",
+      "type": "object"
+    },
+    "UnionMemberRef": {
+      "type": "string"
+    },
+    "Union_": {
+      "type": "string"
+    }
+  },
+  "$ref": "#/$defs/Tuple_"
+}

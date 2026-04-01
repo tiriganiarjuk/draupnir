@@ -5,6 +5,25 @@ consume Verdandi's composition hierarchy instead of toolcompose.
 
 ---
 
+## ⚠ ARCHITECTURE UPDATE (2026-04-01)
+
+**§7 "Models Hold Models" is SUPERSEDED.** The BeforeValidator / models-hold-models / supply-driven loading architecture described in §7 was the original design. It has been replaced by:
+
+1. **Rust PyO3 gate** reads YAML files and validates against JSON Schema → returns JSON string
+2. **Generated input models** (from `datamodel-code-generator`, Regin pattern) have `str` ref fields
+3. **`model_validate_json`** on generated input models → cache with string refs
+4. **Network graph** (NetworkX DiGraph) — string refs are edges, cache entries are nodes
+5. **Topological sort** gives build order, **in-degree >= 2** gives $defs detection
+6. **Flat loop** walks nodes in order, dispatches to type-specific builders via `built` dict
+
+**Why the change:** The BeforeValidator approach required recursive dispatch (`build_fn: Callable`) for schema compilation, which created upward dependencies that violated zone architecture. Three attempts to fix it failed. The graph approach eliminates recursion entirely. See `src/draupnir/WHY_NETWORK_GRAPHS_ARE_THE_SOLUTION.md`.
+
+**What's still valid in this doc:** §1-§6 (Verdandi hierarchy, tier enforcement, $defs strategy, structural differences) are unchanged. §7 model definitions (Pattern, Atom, etc.) are still the source of truth — but ref fields now hold `str` in the generated input models, not model instances. §8-§9 CLI and shell design are still valid. §10 file structure is stale (uses old `functions/` layout, actual layout is `logic/` with v2 zones). §11 gated execution plan is historical reference only.
+
+---
+
+---
+
 ## 1. Major Architectural Changes
 
 ### What Changed: Toolcompose → Verdandi
@@ -533,61 +552,24 @@ reference field contains the actual child model from the cache.
 
 ---
 
-## 7. Architecture: Models Hold Models
+## 7. Architecture
 
-### There is no resolution. There is only loading.
+> **⚠ PARTIALLY SUPERSEDED** — The "Models Hold Models" / BeforeValidator approach below was the original design. It has been replaced by the gate + generated input models + network graph approach. See the architecture update at the top of this document. The MODEL DEFINITIONS below are still the source of truth for the hand-written models. The loading mechanism has changed.
 
-A Pattern is a Pattern. An Atom is an Atom that HOLDS a Pattern (not a
-string reference to one). A Union HOLDS Atoms. A Simplegroup HOLDS field
-models. Every Pydantic model is in FINAL FORM from the moment it's
-validated. Nothing is "resolved later."
+### Current architecture: Gate + Generated Input Models + Network Graph
 
-The mechanism: YAML contains string references like `"atom/kebab_string"`.
-Pydantic `BeforeValidator` converts these to actual cached model instances
-during validation. By the time `model_validate()` returns, the model holds
-real objects, not strings.
+1. **Gate reads file** — `gate_validate(file_path, level_name, schema_dir) → json_string`
+2. **Generated input models** have `str` ref fields (generated from input schemas via `datamodel-code-generator`)
+3. **`model_validate_json(json_string)`** on generated input models → cache with string refs
+4. **String refs ARE graph edges** — registered in a NetworkX DiGraph during/after loading
+5. **Topological sort** = build order, **in-degree >= 2** = $defs candidate
+6. **Flat loop** walks nodes in topo order → dispatches to builder → `built` dict → SchemaDocument
 
-### The ref converter
+There is no resolution step. There is no recursive dispatch. There is no `yaml.safe_load` in Python. There is no BeforeValidator. String refs stay as strings — they are the data the graph needs.
 
-```python
-def ref_from_cache(v: Any, info: ValidationInfo) -> BaseModel:
-    """BeforeValidator that replaces string refs with cached models."""
-    if isinstance(v, str):
-        cache = info.context["cache"]
-        if v not in cache:
-            raise ValueError(f"ref not in cache: {v!r}")
-        return cache[v]
-    return v  # already a model
-```
+### Original design (SUPERSEDED — kept for reference)
 
-### Typed ref annotations — hierarchy + conversion combined
-
-```python
-PatternRef = Annotated[Pattern, BeforeValidator(ref_from_cache)]
-FieldRef = Annotated[
-    Pattern | Atom | Enum | Element | Union,
-    BeforeValidator(ref_from_cache),
-]
-SimpleContainerRef = Annotated[
-    Tuple_ | Simplearray | Simplegroup,
-    BeforeValidator(ref_from_cache),
-]
-ComplexContainerRef = Annotated[
-    Group | Array | Superarray,
-    BeforeValidator(ref_from_cache),
-]
-SectionRef = Annotated[
-    Section | Shallowsection,
-    BeforeValidator(ref_from_cache),
-]
-```
-
-The `BeforeValidator` fires first (converts string → model from cache).
-Then the union type check fires (rejects if wrong tier). A simplegroup
-field value of `"group/metadata"` would retrieve the Group model from
-cache, then fail the `Pattern | Atom | Enum | Element | Union` union
-check. Hierarchy enforcement is AUTOMATIC — wrong-tier references are
-type errors.
+The original mechanism used Pydantic BeforeValidator to convert string refs to cached model instances during `model_validate()`. This worked for loading but created recursive dispatch dependencies in schema compilation that violated zone architecture. See `src/draupnir/WHY_WE_KEEP_GETTING_STUCK.md` for the three failed attempts.
 
 ### Model definitions
 
@@ -699,38 +681,17 @@ class GroupContainers(BaseModel):
     conditional: dict[str, ConditionalField] | None = None
 ```
 
-### The load function
+### The load function (SUPERSEDED)
+
+> The load function below used `yaml.safe_load` + BeforeValidator. The new approach uses the Rust gate + `model_validate_json` on generated input models. The Level enum and level ordering are still valid.
 
 ```python
-LEVEL_ORDER = (
-    "pattern", "enum", "atom", "element", "union",
-    "tuple", "simplearray", "simplegroup",
-    "array", "group", "superarray",
-    "section", "shallowsection", "schema",
-)
-
-LEVEL_MODELS: dict[str, type[BaseModel]] = {
-    "pattern": Pattern, "atom": Atom, "enum": Enum,
-    "element": Element, "union": Union, "tuple": Tuple_,
-    "simplearray": Simplearray, "simplegroup": Simplegroup,
-    "group": Group, "array": Array, "superarray": Superarray,
-    "section": Section, "shallowsection": Shallowsection,
-    "schema": Schema,
-}
-
-def load(path: str, root: Path, cache: dict[str, BaseModel]) -> BaseModel:
-    if path in cache:
-        return cache[path]
-
-    level, name = path.split("/", 1)
-    data = yaml.safe_load((root / level / f"{name}.yaml").read_text())
-
-    model = LEVEL_MODELS[level].model_validate(
-        data,
-        context={"cache": cache},
-    )
-
-    cache[path] = model
+# NEW approach (to be implemented):
+def load_file(file_path: str, level_name: str, schema_dir: str, cache: dict) -> BaseModel:
+    json_string = gate_validate(file_path, level_name, schema_dir)  # Rust gate reads file
+    model = InputModels[level_name].model_validate_json(json_string)  # generated input model
+    cache_key = f"{level_name}/{name}"
+    cache[cache_key] = model
     return model
 ```
 
@@ -847,43 +808,43 @@ the schema tree → $defs entry. The cache key (the path string) is the
 dedup identity. Since all references to `atom/string_plain` return the
 same frozen model instance from the cache, `is` comparison works.
 
-### Two-phase pipeline
+### Pipeline (UPDATED 2026-04-01)
 
 ```
-Phase A: LOAD (impure — file IO)
-  glob each level directory in order
-  load + validate each YAML into Pydantic model
-  populate cache: dict[str, BaseModel]
-  → result: fully populated cache, every model in final form
+Phase A: LOAD (impure — Rust gate reads files)
+  glob each level directory
+  for each YAML file: gate validates → JSON string
+  model_validate_json on generated input model → cache
+  → result: cache of input models with str ref fields
 
-Phase B: EXPORT (pure — no IO, deterministic)
-  for each Schema in cache:
-    walk model tree
-    identify shared nodes ($defs candidates)
-    build JSON Schema output
-    → result: SchemaDocument per schema
+Phase B: GRAPH (pure — no IO, deterministic)
+  build NetworkX DiGraph from cache
+  each cache entry = node, each str ref field value = edge
+  → result: complete graph with model instances as node attributes
 
-Phase C: WRITE (impure — file IO)
+Phase C: COMPILE (pure — no IO, deterministic)
+  topological sort → build order (children before parents)
+  in-degree >= 2 → $defs candidates
+  flat loop: dispatch each node to builder via built dict
+  → result: SchemaDocument per schema
+
+Phase D: WRITE (impure — file IO)
   serialize each SchemaDocument to JSON
   write files
 ```
 
-Phase A is the only place that reads files. Phase B is pure computation.
-Phase C is the only place that writes files. Clean boundaries.
+Phase A: gate reads files (Rust). Phase B+C: pure computation. Phase D: writer writes files.
 
 ### What this eliminates
 
-- **No "resolution" concept** — loading IS the whole process
-- **No walker stage** — the model tree IS the walked tree
-- **No resolver stage** — there's nothing to resolve, models are final
-- **No type chain resolution** — atoms hold Patterns directly
-- **No pool construction** — level-ordered loading fills the cache
-- **No composed field classification** — level directory IS the type
-- **No synthetic group creation** — simplegroups are native
-- **No requirement accumulation** — containers hold requirement zones
-- **No intermediate models** — one model per level, always in final form
-- **No "Raw" vs "Walked" vs "Resolved"** — just the model
-- **No demand-driven recursion** — filesystem glob + level ordering
+- **No "resolution" concept** — string refs stay as strings, they ARE graph edges
+- **No `yaml.safe_load` in Python** — Rust gate handles YAML→JSON
+- **No BeforeValidator on ref fields** — generated input models have `str` refs
+- **No recursive dispatch** — flat loop over topological sort
+- **No Callable DI** — builders receive `built` dict, not callbacks
+- **No `reverse_cache_index` / `count_refs` / `shared_keys`** — graph in-degree replaces all
+- **No walker/resolver stages** — graph operations replace tree walking
+- **No hand-written input models** — generated from schemas via `datamodel-code-generator`
 
 ---
 
@@ -1391,22 +1352,19 @@ Level dispatch:
 
 ---
 
-## 12. Anti-Pattern Watchlist
+## 12. Anti-Pattern Watchlist (UPDATED 2026-04-01)
 
 These are the specific failure modes that post-compaction Claude will
 be tempted toward. Each maps to an architecture violation.
 
 | Temptation | Why it's wrong | What to do instead |
 |-----------|---------------|-------------------|
-| Create a "resolve" function | There is no resolution. Loading IS the pipeline. | Use BeforeValidator to convert refs during model_validate() |
-| Create "Raw" models + "Resolved" models | One model per level, always in final form | Models hold models, not strings |
-| Put YAML loading in resolver/builder | IO lives in `functions/impure/loader.py` ONLY | Loader fills cache, builder reads cache |
-| Use AfterValidator for refs | Wrong order — type union check needs actual models | BeforeValidator converts string → model FIRST |
+| Create a "resolve" function | String refs ARE graph edges. No resolution step. | Build NetworkX graph from string refs |
+| Hand-write input models or add `\| str` to ref aliases | Input models are GENERATED from schemas. `\| str` poisons output schemas. | Use `datamodel-code-generator` on exported input schemas (Regin pattern) |
+| Use `yaml.safe_load` in Python | The Rust gate reads files and returns JSON. Zero yaml imports. | Call `gate_validate(file_path, level_name, schema_dir)` |
+| Use BeforeValidator for ref fields | Superseded. Generated input models have `str` ref fields. | `model_validate_json` on generated models directly |
+| Build recursive dispatch (`build_fn: Callable`) | Creates upward dependencies. Three attempts failed. 28 violations. | Flat loop over topological sort with `built` dict |
 | Return dict from builder | model_dump_json() only at writer boundary | Return SchemaDocument from builder |
-| Add methods to models | Frozen models, zero methods | Logic in `functions/pure/` |
-| Write demand-driven recursive loader | Supply-driven: glob levels in order | `for level in LEVEL_ORDER: load_all(level)` |
-| Keep old pipeline.py | Old shell is toolcompose-coupled | Fresh pipeline: load_all → export_all → write_all |
-| Create per-schema loading | Load once, export many | load_all_levels() fills cache, export_all_schemas() reads it |
-| Put hierarchy checks in separate validator | Type unions ARE the hierarchy check | FieldRef = Pattern \| Atom \| Enum \| Element \| Union |
-| Create 800-line structures.py | Split by tier into structures/ | structures/fields.py, structures/simple_containers.py, etc. |
-| Skip gate checks | "I know what I'm doing" | You don't after compaction. Re-read the section. |
+| Add methods to models | Frozen models, zero methods | Logic in `logic/transform/` zones |
+| Use `reverse_cache_index` / `count_refs` / tree walking | All deleted. Graph replaces this entirely. | Use NetworkX in-degree and topological sort |
+| Skip reading context capture docs | "I know what I'm doing" — you don't after compaction | Read `src/draupnir/WHY_*.md` and `HOW_TO_GET_UNSTUCK.md` first |

@@ -3,123 +3,32 @@
 Orchestrate level (CC=1-5). Chains dispatch table, composed builders,
 tree_walk analysis, and export assembly. This is the single orchestrate
 module — all cross-zone wiring lives here.
+
+NOTE: Schema building and export functions have been removed.
+The recursive dispatch approach (build_or_ref, build_model, resolve_handler,
+export_schema, export_fragment) is dead. Replacement: network graph approach
+that uses topological sort for build order and in-degree for $defs detection.
+Pipeline modes (run_all, run_check, etc.) are stubs awaiting the new graph
+compiler.
 """
 
 import sys
-from collections.abc import Callable
-from functools import partial
 from pathlib import Path
 
-from pydantic import BaseModel
-
-from draupnir.logic.impure.dispatch.primitive import cache_key_to_defs_key
-from draupnir.logic.impure.loader.primitive import extract_cache_name
-from draupnir.logic.impure.loader.assembled import load_all_levels
-from draupnir.logic.impure.pipeline.composed import resolve_paths
-from draupnir.logic.impure.pipeline.primitive import fragment_output_name, schema_filename
-from draupnir.logic.impure.pipeline.simple import args_to_paths, context_to_paths, find_workspace_root
-from draupnir.logic.impure.writer.primitive import serialize_schema
-from draupnir.logic.impure.writer.simple import write_schema
-from draupnir.logic.pure.tree_walk.composed import count_refs
-from draupnir.logic.pure.tree_walk.primitive import wrap_array_as_object
-from draupnir.logic.pure.tree_walk.simple import reverse_cache_index, shared_keys
-from draupnir.logic.orchestrate.compile.dispatch import dispatch
 from draupnir.logic.transform.conditional_build.composed import (
     collect_schema_zone_conditionals,
     collect_section_conditionals,
     iter_schema_sections,
 )
-from draupnir.logic.transform.field_annotate.assembled import build_verdandi_field_refs
-from draupnir.logic.transform.ref_resolve.composed import resolve_refs
-from draupnir.logic.transform.schema_build.assembled import (
-    build_group,
-    build_section,
-    build_shallowsection,
-    build_simplegroup,
-)
-from draupnir.logic.transform.schema_build.composed import build_field, build_schema_properties
-from draupnir.structure.config.fragments import Fragment
 from draupnir.structure.config.pipeline import PipelineArgs, PipelineContext, PipelineMode
-from draupnir.structure.model.complex_containers import Group
-from draupnir.structure.model.schema_output import (
-    FragmentDocument,
-    SchemaArray,
-    SchemaDocument,
-    SchemaRef,
-    SchemaRootConditional,
-)
-from draupnir.structure.model.simple_containers import Simplegroup, VerdandiField
+from draupnir.structure.model.schema_output import SchemaRootConditional
 from draupnir.structure.model.top_level import (
     Schema,
     SchemaSections,
     SchemaShallowsections,
-    Section,
-    Shallowsection,
 )
-
-
-# --- Schema building ---
-
-
-def build_or_ref(
-    model: BaseModel,
-    reverse: dict[int, str],
-    shared: frozenset[str],
-    defs: dict[str, BaseModel],
-    build_model_fn: Callable[..., BaseModel],
-) -> BaseModel:
-    """Build schema for a model, or return $ref if shared."""
-    cache_key = reverse.get(id(model))
-    if cache_key and cache_key in shared:
-        def_name = cache_key_to_defs_key(cache_key)
-        if def_name not in defs:
-            defs[def_name] = build_model_fn(model, reverse, shared, defs)
-        return SchemaRef(ref=f"#/$defs/{def_name}")
-    return build_model_fn(model, reverse, shared, defs)
-
-
-def resolve_container_handler(
-    model: BaseModel,
-) -> Callable | None:
-    """Look up builder for composed container types."""
-    if isinstance(model, Simplegroup):
-        return build_simplegroup
-    if isinstance(model, Group):
-        return build_group
-    if isinstance(model, Section):
-        return build_section
-    if isinstance(model, Shallowsection):
-        return build_shallowsection
-    return None
-
-
-def resolve_handler(
-    model: BaseModel,
-) -> Callable | None:
-    """Look up builder for a model type across all levels."""
-    handler = dispatch.get(type(model))
-    if handler:
-        return handler
-    if isinstance(model, VerdandiField):
-        return build_verdandi_field_refs
-    return resolve_container_handler(model)
-
-
-def build_model(
-    model: BaseModel,
-    reverse: dict[int, str],
-    shared: frozenset[str],
-    defs: dict[str, BaseModel],
-) -> BaseModel:
-    """Dispatch any Verdandi model to its type-specific converter."""
-    build_fn = partial(
-        build_or_ref, reverse=reverse, shared=shared, defs=defs,
-        build_model_fn=build_model,
-    )
-    handler = resolve_handler(model)
-    if handler:
-        return handler(model, build_fn)
-    return build_field(model)
+from draupnir.logic.impure.pipeline.composed import resolve_paths
+from draupnir.logic.impure.pipeline.simple import args_to_paths, context_to_paths, find_workspace_root
 
 
 # --- Conditional assembly (CC=3, orchestrate) ---
@@ -150,66 +59,7 @@ def merge_all_conditionals(
     return tuple(results) if results else None
 
 
-# --- Schema export ---
-
-
-def export_schema(
-    schema: Schema,
-    schema_key: str,
-    cache: dict[str, BaseModel],
-) -> SchemaDocument:
-    """Build a complete SchemaDocument from a loaded Schema model."""
-    reverse = reverse_cache_index(cache)
-    counts = count_refs(schema, reverse)
-    shared = shared_keys(counts)
-    defs: dict[str, BaseModel] = {}
-    build_fn = partial(
-        build_or_ref, reverse=reverse, shared=shared, defs=defs,
-        build_model_fn=build_model,
-    )
-    zones = schema.sections or schema.shallowsections
-    properties, required_keys = build_schema_properties(zones, build_fn)
-    schema_name = extract_cache_name(schema_key)
-    return SchemaDocument(
-        schema_uri="https://json-schema.org/draft/2020-12/schema",
-        schema_id=f"{schema_name}.schema.json",
-        title=schema.title,
-        description=schema.description,
-        required=tuple(required_keys) if required_keys else None,
-        properties=properties,
-        additional_properties=False,
-        defs=defs if defs else None,
-        all_of=merge_all_conditionals(schema, zones),
-    )
-
-
-def export_fragment(
-    model: BaseModel,
-    cache: dict[str, BaseModel],
-) -> tuple[BaseModel, dict[str, BaseModel]]:
-    """Build a standalone schema fragment from any Verdandi model."""
-    reverse = reverse_cache_index(cache)
-    counts = count_refs(model, reverse)
-    shared = shared_keys(counts)
-    defs: dict[str, BaseModel] = {}
-    built = build_model(model, reverse, shared, defs)
-    if isinstance(built, SchemaArray):
-        built = wrap_array_as_object(built)
-    return built, defs
-
-
-def export_all_schemas(
-    cache: dict[str, BaseModel],
-) -> dict[str, SchemaDocument]:
-    """Export all schemas from a populated cache."""
-    results: dict[str, SchemaDocument] = {}
-    for cache_key, model in cache.items():
-        if isinstance(model, Schema):
-            results[cache_key] = export_schema(model, cache_key, cache)
-    return results
-
-
-# --- Pipeline modes ---
+# --- Pipeline modes (stubs — awaiting graph compiler) ---
 
 
 def run_all(
@@ -217,40 +67,17 @@ def run_all(
     output_dir: Path,
 ) -> int:
     """Load everything, export all schemas, write all files."""
-    cache: dict[str, BaseModel] = {}
-    load_all_levels(verdandi_root, cache, resolve_refs)
-    if not cache:
-        sys.stderr.write("error: no files loaded — nothing to generate\n")
-        return 1
-    schemas = export_all_schemas(cache)
-    if not schemas:
-        sys.stderr.write("error: no schemas exported from loaded cache\n")
-        return 1
-    for schema_key, document in schemas.items():
-        output_path = output_dir / schema_filename(schema_key)
-        write_schema(document, output_path)
-        sys.stdout.write(f"wrote {output_path.name}\n")
-    return 0
+    sys.stderr.write("error: schema compiler not yet implemented (graph approach pending)\n")
+    return 1
 
 
 def run_check(
-    verdandi_root: Path,
+    verdanni_root: Path,
     output_dir: Path,
 ) -> int:
-    """Check for drift without writing. Exit 1 if any schema drifted."""
-    cache: dict[str, BaseModel] = {}
-    load_all_levels(verdandi_root, cache, resolve_refs)
-    schemas = export_all_schemas(cache)
-    drift = False
-    for schema_key, document in schemas.items():
-        output_path = output_dir / schema_filename(schema_key)
-        generated = serialize_schema(document) + "\n"
-        if not output_path.exists() or output_path.read_text() != generated:
-            sys.stderr.write(f"DRIFT   {output_path.name}\n")
-            drift = True
-        else:
-            sys.stdout.write(f"OK      {output_path.name}\n")
-    return 1 if drift else 0
+    """Check for drift without writing."""
+    sys.stderr.write("error: schema compiler not yet implemented (graph approach pending)\n")
+    return 1
 
 
 def run_fragments(
@@ -258,39 +85,17 @@ def run_fragments(
     output_dir: Path,
 ) -> int:
     """Export standalone include-fragment schemas."""
-    cache: dict[str, BaseModel] = {}
-    load_all_levels(verdandi_root, cache, resolve_refs)
-    for fragment in Fragment:
-        model = cache.get(fragment.value)
-        if model is None:
-            sys.stderr.write(f"ERROR: {fragment.value} not in cache\n")
-            return 1
-        schema_id = f"{fragment_output_name(fragment)}.schema.json"
-        built, defs = export_fragment(model, cache)
-        document = FragmentDocument(
-            schema_uri="https://json-schema.org/draft/2020-12/schema",
-            schema_id=schema_id,
-            title=built.title,
-            description=built.description,
-            properties=built.properties,
-            required=built.required,
-            additional_properties=built.additional_properties,
-            defs=defs if defs else None,
-        )
-        output_path = output_dir / schema_id
-        write_schema(document, output_path)
-        sys.stdout.write(f"wrote {output_path.name}\n")
-    return 0
+    sys.stderr.write("error: schema compiler not yet implemented (graph approach pending)\n")
+    return 1
 
 
 def run_list(verdandi_root: Path) -> int:
     """List available schemas."""
-    cache: dict[str, BaseModel] = {}
-    load_all_levels(verdandi_root, cache, resolve_refs)
-    schemas = export_all_schemas(cache)
-    for schema_key in sorted(schemas):
-        sys.stdout.write(f"{schema_filename(schema_key)}\n")
-    return 0
+    sys.stderr.write("error: schema compiler not yet implemented (graph approach pending)\n")
+    return 1
+
+
+# --- CLI routing (unchanged) ---
 
 
 def resolve_mode(
@@ -352,7 +157,7 @@ def resolve_context(args: PipelineArgs) -> PipelineContext | str:
     verdandi, output = result
     return PipelineContext(
         mode=mode,
-        verdandi=str(verdandi),
+        verdanni=str(verdandi),
         output=str(output),
     )
 

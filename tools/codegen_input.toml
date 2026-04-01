@@ -1,0 +1,19 @@
+# Schema-to-module mappings for generate_input_models.py
+# Maps input schema names to generated model module paths under structure/
+
+[levels]
+pattern = "gen/input/pattern"
+enum = "gen/input/enum"
+atom = "gen/input/atom"
+element = "gen/input/element"
+tuple = "gen/input/tuple"
+union = "gen/input/union"
+field = "gen/input/field"
+simplearray = "gen/input/simplearray"
+simplegroup = "gen/input/simplegroup"
+array = "gen/input/array"
+group = "gen/input/group"
+superarray = "gen/input/superarray"
+section = "gen/input/section"
+shallowsection = "gen/input/shallowsection"
+schema = "gen/input/schema"

@@ -32,29 +32,29 @@ None of them felt uncertain while doing it.
 ## You Will Get These Things Wrong
 
 ### Creating a "resolve" function
-**Detection:** If you find yourself writing `def resolve(`, `resolve_walked_`, `ResolvedNode`...
-**Why it's wrong:** There is no resolution step. Loading IS the pipeline. Pydantic `BeforeValidator` converts string refs to cached models during `model_validate()`. Every model is in FINAL FORM from the moment it's validated.
-**Recovery:** Re-read DRAUPNIR_REDESIGN.md §7 "There is no resolution. There is only loading."
+**Detection:** If you find yourself writing `def resolve(`, `resolve_refs`, `resolve_walked_`, `ResolvedNode`...
+**Why it's wrong:** There is no resolution step. String refs in YAML files ARE the graph edges. They stay as strings in the generated input models. The network graph uses them directly. Three attempts at resolution functions all failed.
+**Recovery:** Read `src/draupnir/WHY_NETWORK_GRAPHS_ARE_THE_SOLUTION.md`
 
-### Creating "Raw" and "Resolved" model pairs
-**Detection:** If you find yourself writing `RawPattern`, `RawAtom`, `ResolvedPattern`, `ResolvedAtom`...
-**Why it's wrong:** One model per level. No "Raw" prefix. No "Resolved" prefix. A Pattern is a Pattern. An Atom is an Atom that HOLDS a Pattern (the actual frozen model, not a string). There are no intermediate states.
-**Recovery:** Re-read DRAUPNIR_REDESIGN.md §7 "Model definitions"
+### Hand-writing input model types
+**Detection:** If you find yourself writing `InputAtom`, `InputPattern`, or adding `| str` to existing ref type aliases...
+**Why it's wrong:** Input models are GENERATED from input schemas using `datamodel-code-generator` (same pattern as Regin). Adding `| str` to existing ref type aliases poisons output schemas for the entire pipeline. This was tried and catastrophically failed.
+**Recovery:** Read `src/draupnir/WHY_WE_KEEP_GETTING_STUCK.md` "Attempt 3". Use the schema export + generation approach.
 
-### Putting IO outside the loader
-**Detection:** If you find yourself writing `Path.read_text()`, `open()`, `yaml.safe_load()` anywhere except `functions/impure/loader.py`...
-**Why it's wrong:** IO lives in exactly two places: `loader.py` (reads) and `writer.py` (writes). The builder is PURE. It receives a cache of frozen models and returns SchemaDocuments. No file access.
-**Recovery:** Re-read DRAUPNIR_REDESIGN.md §7 "Two-phase pipeline"
+### Putting IO outside the gate/writer boundary
+**Detection:** If you find yourself writing `Path.read_text()`, `open()`, `yaml.safe_load()` in Python...
+**Why it's wrong:** The Rust PyO3 gate reads files. It takes `file_path`, not `yaml_content`. No `yaml.safe_load()` in Python. The gate IS the IO boundary for reads. `writer.py` is the IO boundary for writes. Everything between is pure.
+**Recovery:** Read `logic/impure/loader/ffi.py` — that's the gate FFI wrapper.
 
-### Using AfterValidator for ref types
-**Detection:** If you find yourself writing `AfterValidator` on ref fields...
-**Why it's wrong:** `BeforeValidator` fires FIRST, converting the YAML string `"atom/kebab_string"` to the actual cached `Atom` model. THEN the union type check fires, confirming the model is the right tier. AfterValidator would try to validate a string against a union of model types — wrong order.
-**Recovery:** Re-read DRAUPNIR_REDESIGN.md §7 "Typed ref annotations — hierarchy + conversion combined"
+### Using BeforeValidator for ref types
+**Detection:** If you find yourself writing `BeforeValidator(ref_from_cache)` on ref fields...
+**Why it's wrong:** The old "models hold models" approach with BeforeValidator is gone. The new architecture uses generated input models with `str` ref fields. String refs stay as strings — they are the graph edges. No cache lookup during validation.
+**Recovery:** Read `src/draupnir/WHY_NETWORK_GRAPHS_ARE_THE_SOLUTION.md` "Input Models: Generated, Not Hand-Written"
 
-### Building demand-driven recursive loading
-**Detection:** If you find yourself writing recursive `load()` calls inside validators, or `info.context["load"](v)` in BeforeValidator...
-**Why it's wrong:** The architecture is SUPPLY-DRIVEN. Glob each level directory in LEVEL_ORDER. When a BeforeValidator fires, the referenced model is GUARANTEED to already be in cache (lower levels loaded first). If it's not in cache, that's a hard error (missing file), not a trigger for recursive loading.
-**Recovery:** Re-read DRAUPNIR_REDESIGN.md §7 "Load strategy: supply-driven, full tree"
+### Building recursive dispatch
+**Detection:** If you find yourself writing `build_fn: Callable`, `build_or_ref`, `build_model` with recursive calls...
+**Why it's wrong:** Recursive dispatch creates upward dependencies (leaf calls root). Three attempts failed. 28 Callable DI violations. The architecture correctly forbids this. All recursive dispatch code has been deleted.
+**Recovery:** Read `src/draupnir/WHY_WE_KEEP_GETTING_STUCK.md`. The solution is a flat loop over topological sort order using the `built` dict.
 
 ### Reaching for `dict` (CANARY — you may need a context refresh)
 **Detection:** If you find yourself writing `dict[str, ...]`, passing dicts between functions, building dicts from YAML data, or using dict as an intermediate representation...
@@ -176,17 +176,17 @@ Do NOT use bare `cargo build` — it skips gate module deployment (maturin build
 
 1. **What phase am I in?** Check the gated plan (DRAUPNIR_REDESIGN.md §11). Find the last completed gate. That's where you are.
 
-2. **Am I about to create a resolve function?** There is no resolution. Loading IS the pipeline. If you're writing `resolve_`, STOP.
+2. **Am I about to create a resolve function?** There is no resolution. String refs ARE graph edges. If you're writing `resolve_`, STOP.
 
-3. **Am I about to create Raw/Resolved model pairs?** One model per level. Final form from validation. No intermediate states.
+3. **Am I hand-writing input models?** Input models are GENERATED from schemas. If you're writing `InputAtom` or adding `| str` to ref aliases, STOP.
 
-4. **Am I importing from draupnir_old?** Never. It's reference-only. Read it, don't import it.
+4. **Am I using yaml.safe_load?** The Rust gate reads files. Zero yaml imports in the codebase. If you're importing yaml, STOP.
 
-5. **Am I loading on demand?** No. Supply-driven. Glob levels in order. Cache is pre-filled.
+5. **Am I building recursive dispatch?** All recursive code was deleted. Flat loop over topological sort. If you're writing `build_fn: Callable`, STOP.
 
 6. **Are my functions small and single-purpose?** Run `uv run pytest tests/test_guardrails.py` NOW.
 
-7. **Is IO only in loader.py and writer.py?** If `Path` or `open()` appears anywhere else, STOP.
+7. **Is IO only in the gate and writer?** If `Path.read_text()`, `open()`, or `yaml` appears in Python, STOP. The gate handles reads.
 
 8. **Have I run guardrails recently?** `uv run pytest tests/test_guardrails.py` — if you haven't run it in the last 2-3 changes, run it NOW. Architectural debt compounds faster than you think.
 
@@ -198,7 +198,7 @@ Do NOT use bare `cargo build` — it skips gate module deployment (maturin build
 
 ### The architecture in one paragraph:
 
-Draupnir reads Verdandi YAML files from `tools/verdandi/`. It globs each level directory in order (pattern → enum → atom → element → union → ... → schema). Each YAML is validated through a level-specific Pydantic model. BeforeValidators on ref fields convert string references to actual cached models. After loading completes, the cache holds every file as a frozen Pydantic model — models that HOLD their children as actual models, not strings. The builder walks this tree of models, identifies shared nodes for $defs, and produces SchemaDocuments. The writer serializes them to JSON. Two impure boundaries (loader reads, writer writes). Everything between is pure.
+Draupnir reads Verdandi YAML files (~348 files across 15 level directories). A Rust PyO3 gate reads each file, validates against JSON Schema, and returns a JSON string. `model_validate_json` on generated input models (with `str` ref fields) produces the cache. String refs stay as strings — they are graph edges in a NetworkX DiGraph. The graph gives topological sort (build order), in-degree >= 2 ($defs detection), and adjacency (which children belong to each parent). A flat loop walks nodes in topological order, dispatches each to its type-specific builder via the `built` dict, and assembles SchemaDocuments. The writer serializes to JSON. Two impure boundaries: gate reads files, writer writes files. Everything between is pure.
 
 ---
 

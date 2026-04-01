@@ -1,0 +1,72 @@
+{
+  "$defs": {
+    "PatternRef": {
+      "type": "string"
+    }
+  },
+  "description": "Constrained base type: string, integer, or boolean.",
+  "properties": {
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "type": {
+      "enum": [
+        "string",
+        "integer",
+        "boolean"
+      ],
+      "title": "Type",
+      "type": "string"
+    },
+    "pattern": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PatternRef"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "excludes": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/PatternRef"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Excludes"
+    },
+    "min_length": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Min Length"
+    },
+    "description": {
+      "title": "Description",
+      "type": "string"
+    }
+  },
+  "required": [
+    "title",
+    "type",
+    "description"
+  ],
+  "title": "Atom",
+  "type": "object"
+}

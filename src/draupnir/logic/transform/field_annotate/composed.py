@@ -5,8 +5,6 @@ CC=4+ functions. Applies field-level metadata to JSON Schema nodes.
 No IO. Pure model-to-model conversion.
 """
 
-from collections.abc import Callable
-
 from pydantic import BaseModel
 
 from draupnir.logic.transform.field_annotate.simple import (

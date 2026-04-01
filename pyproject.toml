@@ -5,7 +5,7 @@ description = "Schema generator — walks composition trees from root schema def
 requires-python = ">=3.13"
 dependencies = [
     "pydantic>=2.0",
-    "pyyaml>=6.0",
+    "networkx>=3.0",
     "typer>=0.9",
 ]
 
@@ -16,6 +16,7 @@ draupnir = "draupnir.cli:main"
 dev = [
     "pytest>=8.0",
     "jsonschema>=4.23",
+    "datamodel-code-generator>=0.26",
 ]
 
 [build-system]

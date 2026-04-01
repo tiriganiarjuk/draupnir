@@ -1,30 +1,35 @@
 """Zone collection — single-zone iteration.
 
 CC=2-3 helpers that iterate one zone dict at a time.
+Looks up pre-built schemas from the build context by cache key string.
+Zone dict values are RootModel[str] wrappers — access .root for the key.
 """
 
-from collections.abc import Callable
+from pydantic import BaseModel, RootModel
 
-from pydantic import BaseModel
+from draupnir.structure.config.build_context import BuildContext
 
 
 def collect_required_optional(
-    required: dict[str, BaseModel] | None,
-    optional: dict[str, BaseModel] | None,
-    build_fn: Callable[[BaseModel], BaseModel],
+    required: dict[str, RootModel] | None,
+    optional: dict[str, RootModel] | None,
+    context: BuildContext,
 ) -> tuple[dict[str, BaseModel], list[str]]:
     """Build properties and required keys from required/optional zones."""
-    req_props = build_zone_properties(required, build_fn)
-    opt_props = build_zone_properties(optional, build_fn)
+    req_props = build_zone_properties(required, context)
+    opt_props = build_zone_properties(optional, context)
     properties = {**req_props, **opt_props}
     return properties, list(req_props.keys())
 
 
 def build_zone_properties(
-    zone: dict[str, BaseModel] | None,
-    build_fn: Callable[[BaseModel], BaseModel],
+    zone: dict[str, RootModel] | None,
+    context: BuildContext,
 ) -> dict[str, BaseModel]:
-    """Build properties from a single zone dict."""
+    """Build properties from a single zone dict.
+
+    Zone dict values are RootModel[str] — .root gives the cache key.
+    """
     if not zone:
         return {}
-    return {name: build_fn(model) for name, model in zone.items()}
+    return {name: context.built[item_ref.root] for name, item_ref in zone.items()}

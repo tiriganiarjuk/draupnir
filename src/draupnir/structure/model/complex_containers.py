@@ -10,9 +10,12 @@ Ref type aliases defined here:
   GroupContainerRef — simplearray | simplegroup | array (group containers)
   GroupFieldConditionalRef — VerdandiField only (group field conditionals)
   GroupOrSimplegroupRef — group | simplegroup (for superarray items)
+
+Constraints (exactly_one_condition, at_least_one_section) are enforced
+by the input JSON Schema, not by model validators.
 """
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from draupnir.structure.model.conditionals import ConditionalWhen
 from draupnir.structure.model.simple_containers import (
@@ -69,18 +72,6 @@ class GroupFieldConditionalEntry(BaseModel):
     always_when: ConditionalWhen | None = None
     not_when: ConditionalWhen | None = None
 
-    @model_validator(mode="after")
-    def exactly_one_condition(self) -> "GroupFieldConditionalEntry":
-        conditions = (
-            self.only_when is not None,
-            self.always_when is not None,
-            self.not_when is not None,
-        )
-        if sum(conditions) != 1:
-            error_message ="exactly one of only_when/always_when/not_when required"
-            raise ValueError(error_message)
-        return self
-
 
 class GroupContainerConditionalEntry(BaseModel):
     """Conditional container entry for group container zones."""
@@ -91,18 +82,6 @@ class GroupContainerConditionalEntry(BaseModel):
     only_when: ConditionalWhen | None = None
     always_when: ConditionalWhen | None = None
     not_when: ConditionalWhen | None = None
-
-    @model_validator(mode="after")
-    def exactly_one_condition(self) -> "GroupContainerConditionalEntry":
-        conditions = (
-            self.only_when is not None,
-            self.always_when is not None,
-            self.not_when is not None,
-        )
-        if sum(conditions) != 1:
-            error_message ="exactly one of only_when/always_when/not_when required"
-            raise ValueError(error_message)
-        return self
 
 
 class GroupFields(BaseModel):
@@ -134,13 +113,6 @@ class Group(BaseModel):
     description: str
     fields: GroupFields | None = None
     containers: GroupContainers | None = None
-
-    @model_validator(mode="after")
-    def at_least_one_section(self) -> "Group":
-        if self.fields is None and self.containers is None:
-            error_message ="at least one of fields/containers must be set"
-            raise ValueError(error_message)
-        return self
 
 
 # --- Superarray models ---

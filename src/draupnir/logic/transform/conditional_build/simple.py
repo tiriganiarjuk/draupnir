@@ -4,14 +4,10 @@ CC=2-3 builders. Each has a small number of branches for
 condition type dispatch or path parsing.
 """
 
-from collections.abc import Callable
-
 from draupnir.logic.transform.conditional_build.primitive import (
     build_always_when,
-    build_else_nested,
     build_not_when,
     build_only_when,
-    build_then_nested,
     parse_cross_section_path,
 )
 from draupnir.structure.model.conditionals import ConditionalWhen
@@ -47,16 +43,18 @@ def conditional_mode_name(
     return "not_when"
 
 
-def select_when_builder(
+def dispatch_when_builder(
+    field_name: str,
+    if_clause: SchemaCondition,
     only_when: ConditionalWhen | None,
     always_when: ConditionalWhen | None,
-) -> Callable:
-    """Select the builder function based on which when is set."""
+) -> SchemaConditional:
+    """Dispatch to the correct when builder based on which condition is set."""
     if only_when:
-        return build_only_when
+        return build_only_when(field_name, if_clause)
     if always_when:
-        return build_always_when
-    return build_not_when
+        return build_always_when(field_name, if_clause)
+    return build_not_when(field_name, if_clause)
 
 
 def resolve_cross_section_mode(
@@ -93,8 +91,7 @@ def build_conditional_entry(
     if active is None or is_cross_section(active):
         return None
     if_clause = build_if_condition(active)
-    builder = select_when_builder(only_when, always_when)
-    return builder(field_name, if_clause)
+    return dispatch_when_builder(field_name, if_clause, only_when, always_when)
 
 
 def build_value_constraint(when: ConditionalWhen) -> SchemaConst | SchemaEnumConstraint:
@@ -139,6 +136,26 @@ def build_if_nested(when: ConditionalWhen) -> SchemaNestedPath:
     return wrap_nested_path(path_segments, leaf)
 
 
+def build_then_nested(
+    target_path: tuple[str, ...],
+    field_name: str,
+) -> SchemaNestedPath:
+    """Build nested then-clause: require field at target path."""
+    leaf = SchemaNestedPath(required=(field_name,))
+    return wrap_nested_path(target_path, leaf)
+
+
+def build_else_nested(
+    target_path: tuple[str, ...],
+    field_name: str,
+) -> SchemaNestedPath:
+    """Build nested else-clause: forbid field at target path."""
+    leaf = SchemaNestedPath(
+        properties=NestedPathProperties({field_name: False}),
+    )
+    return wrap_nested_path(target_path, leaf)
+
+
 def build_root_conditional(
     when: ConditionalWhen,
     field_name: str,
@@ -150,15 +167,15 @@ def build_root_conditional(
     if mode == "only_when":
         return SchemaRootConditional(
             if_=if_clause,
-            then_=build_then_nested(target_path, field_name, wrap_nested_path),
-            else_=build_else_nested(target_path, field_name, wrap_nested_path),
+            then_=build_then_nested(target_path, field_name),
+            else_=build_else_nested(target_path, field_name),
         )
     if mode == "always_when":
         return SchemaRootConditional(
             if_=if_clause,
-            then_=build_then_nested(target_path, field_name, wrap_nested_path),
+            then_=build_then_nested(target_path, field_name),
         )
     return SchemaRootConditional(
         if_=if_clause,
-        then_=build_else_nested(target_path, field_name, wrap_nested_path),
+        then_=build_else_nested(target_path, field_name),
     )

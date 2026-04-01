@@ -3,13 +3,10 @@
 CC=1 builders. No branching, no iteration.
 """
 
-from collections.abc import Callable
-
 from pydantic import BaseModel
 
-from draupnir.structure.model.fields import Enum as VerdandiEnum
+from draupnir.structure.config.build_context import BuildContext
 from draupnir.structure.model.schema_output import SchemaArray, SchemaConditional, SchemaField
-from draupnir.structure.model.simple_containers import Simplearray
 
 
 def merge_zone_results(
@@ -22,24 +19,31 @@ def merge_zone_results(
     return {**a_props, **b_props}, a_req + b_req, a_conds + b_conds
 
 
-def build_enum(enum_model: VerdandiEnum) -> SchemaField:
-    """Enum -> {type: string, enum: [...]}."""
+def build_pattern(model: BaseModel, context: BuildContext) -> SchemaField:
+    """Pattern -> {type: string, pattern: regex}."""
     return SchemaField(
-        title=enum_model.title,
+        title=model.title.root,
         type="string",
-        enum=enum_model.values,
-        description=enum_model.description,
+        pattern=model.regex.root,
+        description=model.description.root,
     )
 
 
-def build_simplearray(
-    simplearray: Simplearray,
-    build_fn: Callable[[BaseModel], BaseModel],
-) -> SchemaArray:
+def build_enum(model: BaseModel, context: BuildContext) -> SchemaField:
+    """Enum -> {type: string, enum: [...]}."""
+    return SchemaField(
+        title=model.title.root,
+        type="string",
+        enum=tuple(model.values.root),
+        description=model.description.root,
+    )
+
+
+def build_simplearray(model: BaseModel, context: BuildContext) -> SchemaArray:
     """Simplearray -> {type: array, items}."""
     return SchemaArray(
-        title=simplearray.title,
-        items=build_fn(simplearray.items),
-        description=simplearray.description,
+        title=model.title.root,
+        items=context.built[model.items.root],
+        description=model.description.root,
         min_items=1,
     )

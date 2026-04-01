@@ -4,7 +4,7 @@ Covers the exists predicate, value-based predicates, and the leading-dot
 cross-section path convention.
 """
 
-from draupnir.logic.transform.conditional_build.composed import (
+from draupnir.logic.transform.conditional_build.simple import (
     build_conditional_entry,
     build_if_condition,
     build_if_nested,

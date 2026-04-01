@@ -1,34 +1,65 @@
 """Schema pipeline orchestration — wire all zones together.
 
-Orchestrate level (CC=1-5). Chains dispatch table, composed builders,
-tree_walk analysis, and export assembly. This is the single orchestrate
-module — all cross-zone wiring lives here.
-
-NOTE: Schema building and export functions have been removed.
-The recursive dispatch approach (build_or_ref, build_model, resolve_handler,
-export_schema, export_fragment) is dead. Replacement: network graph approach
-that uses topological sort for build order and in-degree for $defs detection.
-Pipeline modes (run_all, run_check, etc.) are stubs awaiting the new graph
-compiler.
+Orchestrate level (CC=1-5). Compiles the dependency graph via topological
+sort, dispatches each node to its builder, detects $defs from in-degree,
+assembles conditionals, and routes pipeline modes.
 """
 
 import sys
 from pathlib import Path
 
+import networkx as nx
+from pydantic import BaseModel
+
+from draupnir.logic.impure.loader.composed import load_all_levels
+from draupnir.logic.impure.pipeline.composed import resolve_paths
+from draupnir.logic.impure.pipeline.primitive import fragment_output_name, schema_filename
+from draupnir.logic.impure.pipeline.simple import args_to_paths, context_to_paths, find_workspace_root
+from draupnir.logic.impure.writer.simple import write_schema
+from draupnir.logic.transform.graph_build.composed import build_graph
 from draupnir.logic.transform.conditional_build.composed import (
     collect_schema_zone_conditionals,
     collect_section_conditionals,
     iter_schema_sections,
 )
+from draupnir.logic.transform.graph_build.primitive import cache_key_to_defs_key
+from draupnir.logic.transform.schema_build.assembled import (
+    build_group,
+    build_section,
+    build_shallowsection,
+    build_simplegroup,
+    build_verdandi_field,
+    unwrap_zone,
+)
+from draupnir.logic.transform.schema_build.composed import build_atom
+from draupnir.logic.transform.schema_build.primitive import (
+    build_enum,
+    build_pattern,
+    build_simplearray,
+)
+from draupnir.logic.transform.schema_build.simple import (
+    build_array,
+    build_element,
+    build_superarray,
+    build_tuple,
+    build_union,
+    optional_tuple,
+)
+from draupnir.logic.transform.zone_collect.simple import build_zone_properties
+from draupnir.structure.config.build_context import BuildContext
+from draupnir.structure.config.fragments import Fragment
 from draupnir.structure.config.pipeline import PipelineArgs, PipelineContext, PipelineMode
-from draupnir.structure.model.schema_output import SchemaRootConditional
+from draupnir.structure.model.schema_output import (
+    FragmentDocument,
+    SchemaDocument,
+    SchemaRef,
+    SchemaRootConditional,
+)
 from draupnir.structure.model.top_level import (
     Schema,
     SchemaSections,
     SchemaShallowsections,
 )
-from draupnir.logic.impure.pipeline.composed import resolve_paths
-from draupnir.logic.impure.pipeline.simple import args_to_paths, context_to_paths, find_workspace_root
 
 
 # --- Conditional assembly (CC=3, orchestrate) ---
@@ -59,7 +90,167 @@ def merge_all_conditionals(
     return tuple(results) if results else None
 
 
-# --- Pipeline modes (stubs — awaiting graph compiler) ---
+# --- Graph compile loop ---
+
+
+def compile_graph(
+    graph: nx.DiGraph,
+) -> tuple[BuildContext, dict[str, BaseModel]]:
+    """Walk graph in topological order, build each node, detect $defs.
+
+    Returns (context, defs) where context.built/full hold all results
+    and defs holds nodes with in-degree >= 2 (shared across parents).
+    Schema-level nodes are skipped — assembled separately.
+    """
+    dispatch = {
+        "pattern": build_pattern,
+        "enum": build_enum,
+        "atom": build_atom,
+        "element": build_element,
+        "tuple": build_tuple,
+        "union": build_union,
+        "field": build_verdandi_field,
+        "simplearray": build_simplearray,
+        "simplegroup": build_simplegroup,
+        "array": build_array,
+        "group": build_group,
+        "superarray": build_superarray,
+        "section": build_section,
+        "shallowsection": build_shallowsection,
+    }
+    order = list(reversed(list(nx.topological_sort(graph))))
+    context = BuildContext()
+    defs: dict[str, BaseModel] = {}
+    for cache_key in order:
+        level = graph.nodes[cache_key]["level"]
+        if level == "schema":
+            continue
+        model = graph.nodes[cache_key]["model"]
+        result = dispatch[level](model, context)
+        context.full[cache_key] = result
+        context.built[cache_key] = result
+        if graph.in_degree(cache_key) >= 2:
+            defs_key = cache_key_to_defs_key(cache_key)
+            defs[defs_key] = result
+            context.built[cache_key] = SchemaRef(ref=f"#/$defs/{defs_key}")
+    return context, defs
+
+
+# --- Schema assembly ---
+
+
+def collect_section_zone_properties(
+    zones: BaseModel | None,
+    context: BuildContext,
+) -> tuple[dict[str, BaseModel], list[str]]:
+    """Collect properties and required keys from a schema zone set.
+
+    Handles .required and .optional zone dicts. Each zone dict value
+    is a RootModel[str] section ref — looked up from context.built.
+    """
+    if zones is None:
+        return {}, []
+    req_dict = unwrap_zone(zones.required)
+    opt_dict = unwrap_zone(zones.optional)
+    req_props = build_zone_properties(req_dict, context) if req_dict else {}
+    opt_props = build_zone_properties(opt_dict, context) if opt_dict else {}
+    return {**req_props, **opt_props}, list(req_props.keys())
+
+
+def assemble_schema(
+    cache_key: str,
+    model: BaseModel,
+    context: BuildContext,
+    defs: dict[str, BaseModel],
+) -> SchemaDocument:
+    """Assemble a SchemaDocument from a compiled schema model.
+
+    Collects section properties from sections + shallowsections zones,
+    builds required list, attaches $defs.
+    """
+    sec_props, sec_req = collect_section_zone_properties(model.sections, context)
+    shallow_props, shallow_req = collect_section_zone_properties(
+        model.shallowsections, context,
+    )
+    properties = {**sec_props, **shallow_props}
+    required_keys = sec_req + shallow_req
+    schema_name = cache_key.split("/", 1)[1]
+    return SchemaDocument(
+        schema_uri="https://json-schema.org/draft/2020-12/schema",
+        schema_id=schema_name,
+        title=model.title.root,
+        description=model.description.root,
+        required=optional_tuple(required_keys),
+        properties=properties,
+        additional_properties=False,
+        defs=defs or None,
+    )
+
+
+def assemble_fragment(
+    cache_key: str,
+    context: BuildContext,
+    defs: dict[str, BaseModel],
+) -> FragmentDocument:
+    """Assemble a FragmentDocument from a compiled cache entry.
+
+    Uses context.full for the root (in case it's a SchemaRef in context.built).
+    """
+    root_schema = context.full[cache_key]
+    fragment_name = cache_key.replace("/", "_")
+    return FragmentDocument(
+        schema_uri="https://json-schema.org/draft/2020-12/schema",
+        schema_id=f"include_{fragment_name}",
+        title=root_schema.title or fragment_name,
+        description=root_schema.description or "",
+        properties={"items": root_schema} if hasattr(root_schema, "items") else {},
+        defs=defs or None,
+    )
+
+
+def export_all_schemas(
+    graph: nx.DiGraph,
+    context: BuildContext,
+    defs: dict[str, BaseModel],
+) -> dict[str, SchemaDocument]:
+    """Assemble SchemaDocuments for all schema-level nodes in the graph."""
+    schemas: dict[str, SchemaDocument] = {}
+    for cache_key in graph.nodes:
+        if graph.nodes[cache_key]["level"] != "schema":
+            continue
+        model = graph.nodes[cache_key]["model"]
+        schemas[cache_key] = assemble_schema(cache_key, model, context, defs)
+    return schemas
+
+
+def export_fragments(
+    context: BuildContext,
+    defs: dict[str, BaseModel],
+) -> dict[str, FragmentDocument]:
+    """Assemble FragmentDocuments for all registered fragments."""
+    fragments: dict[str, FragmentDocument] = {}
+    for fragment in Fragment:
+        if fragment.value in context.full:
+            fragments[fragment.name] = assemble_fragment(
+                fragment.value, context, defs,
+            )
+    return fragments
+
+
+# --- Pipeline modes ---
+
+
+def load_and_compile(
+    verdandi_root: Path,
+) -> tuple[nx.DiGraph, BuildContext, dict[str, BaseModel]] | str:
+    """Load all levels, build graph, compile. Returns (graph, ctx, defs) or error."""
+    cache: dict[str, BaseModel] = {}
+    errors = load_all_levels(verdandi_root, cache)
+    if errors:
+        return "\n".join(errors)
+    graph = build_graph(cache)
+    context, defs = compile_graph(graph)
+    return graph, context, defs
 
 
 def run_all(
@@ -67,17 +258,52 @@ def run_all(
     output_dir: Path,
 ) -> int:
     """Load everything, export all schemas, write all files."""
-    sys.stderr.write("error: schema compiler not yet implemented (graph approach pending)\n")
-    return 1
+    result = load_and_compile(verdandi_root)
+    if isinstance(result, str):
+        sys.stderr.write(result + "\n")
+        return 1
+    graph, context, defs = result
+    schemas = export_all_schemas(graph, context, defs)
+    for cache_key, document in schemas.items():
+        write_schema(document, output_dir / schema_filename(cache_key))
+    fragments = export_fragments(context, defs)
+    for name, document in fragments.items():
+        write_schema(document, output_dir / f"{name.replace('_', '-')}.schema.json")
+    return 0
+
+
+def check_schema_drift(
+    schemas: dict[str, SchemaDocument],
+    output_dir: Path,
+) -> list[str]:
+    """Compare compiled schemas against on-disk. Returns list of drift messages."""
+    messages: list[str] = []
+    for cache_key, document in schemas.items():
+        path = output_dir / schema_filename(cache_key)
+        if not path.exists():
+            messages.append(f"missing: {path}")
+            continue
+        expected = document.model_dump_json(by_alias=True, exclude_none=True, indent=2)
+        if path.read_text().rstrip() != expected:
+            messages.append(f"drifted: {path}")
+    return messages
 
 
 def run_check(
-    verdanni_root: Path,
+    verdandi_root: Path,
     output_dir: Path,
 ) -> int:
     """Check for drift without writing."""
-    sys.stderr.write("error: schema compiler not yet implemented (graph approach pending)\n")
-    return 1
+    result = load_and_compile(verdandi_root)
+    if isinstance(result, str):
+        sys.stderr.write(result + "\n")
+        return 1
+    graph, context, defs = result
+    schemas = export_all_schemas(graph, context, defs)
+    messages = check_schema_drift(schemas, output_dir)
+    for message in messages:
+        sys.stderr.write(message + "\n")
+    return 1 if messages else 0
 
 
 def run_fragments(
@@ -85,14 +311,28 @@ def run_fragments(
     output_dir: Path,
 ) -> int:
     """Export standalone include-fragment schemas."""
-    sys.stderr.write("error: schema compiler not yet implemented (graph approach pending)\n")
-    return 1
+    result = load_and_compile(verdandi_root)
+    if isinstance(result, str):
+        sys.stderr.write(result + "\n")
+        return 1
+    _graph, context, defs = result
+    fragments = export_fragments(context, defs)
+    for name, document in fragments.items():
+        write_schema(document, output_dir / f"{name.replace('_', '-')}.schema.json")
+    return 0
 
 
 def run_list(verdandi_root: Path) -> int:
     """List available schemas."""
-    sys.stderr.write("error: schema compiler not yet implemented (graph approach pending)\n")
-    return 1
+    cache: dict[str, BaseModel] = {}
+    errors = load_all_levels(verdandi_root, cache)
+    if errors:
+        sys.stderr.write("\n".join(errors) + "\n")
+        return 1
+    for cache_key in sorted(cache):
+        if cache_key.startswith("schema/"):
+            sys.stdout.write(cache_key + "\n")
+    return 0
 
 
 # --- CLI routing (unchanged) ---

@@ -15,9 +15,12 @@ Ref type aliases defined here:
   FieldTypeRef — type-tier + tuple (for VerdandiField.type, internal to membrane)
   FieldItemRef — VerdandiField only (containers see ONLY the membrane)
   SimplegroupItemRef — simplearray + VerdandiField (for simplegroup zones)
+
+Constraints (exactly_one_condition, at_least_one_zone) are enforced
+by the input JSON Schema, not by model validators.
 """
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict
 
 from draupnir.structure.model.conditionals import ConditionalWhen
 from draupnir.structure.model.field import ConstraintRule, SemanticBlock
@@ -78,18 +81,6 @@ class SimplegroupConditionalEntry(BaseModel):
     always_when: ConditionalWhen | None = None
     not_when: ConditionalWhen | None = None
 
-    @model_validator(mode="after")
-    def exactly_one_condition(self) -> "SimplegroupConditionalEntry":
-        conditions = (
-            self.only_when is not None,
-            self.always_when is not None,
-            self.not_when is not None,
-        )
-        if sum(conditions) != 1:
-            error_message ="exactly one of only_when/always_when/not_when required"
-            raise ValueError(error_message)
-        return self
-
 
 class Simplegroup(BaseModel):
     """Flat object with field zones — no nested containers."""
@@ -101,14 +92,3 @@ class Simplegroup(BaseModel):
     required: dict[str, SimplegroupItemRef] | None = None
     optional: dict[str, SimplegroupItemRef] | None = None
     conditional: dict[str, SimplegroupConditionalEntry] | None = None
-
-    @model_validator(mode="after")
-    def at_least_one_zone(self) -> "Simplegroup":
-        if (
-            self.required is None
-            and self.optional is None
-            and self.conditional is None
-        ):
-            error_message ="at least one of required/optional/conditional must be set"
-            raise ValueError(error_message)
-        return self

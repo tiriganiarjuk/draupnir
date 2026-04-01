@@ -13,9 +13,12 @@ Ref type aliases defined here:
 
 ShallowsectionFields parallels GroupFields — wraps required/optional/conditional
 field zones under a fields: key.
+
+Constraints (exactly_one_condition, max_three_containers, exactly_one_section_type)
+are enforced by the input JSON Schema, not by model validators.
 """
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict
 
 from draupnir.structure.model.conditionals import ConditionalWhen
 from draupnir.structure.model.complex_containers import (
@@ -45,18 +48,6 @@ class SectionContainerConditionalEntry(BaseModel):
     only_when: ConditionalWhen | None = None
     always_when: ConditionalWhen | None = None
     not_when: ConditionalWhen | None = None
-
-    @model_validator(mode="after")
-    def exactly_one_condition(self) -> "SectionContainerConditionalEntry":
-        conditions = (
-            self.only_when is not None,
-            self.always_when is not None,
-            self.not_when is not None,
-        )
-        if sum(conditions) != 1:
-            error_message ="exactly one of only_when/always_when/not_when required"
-            raise ValueError(error_message)
-        return self
 
 
 class SectionContainers(BaseModel):
@@ -96,18 +87,6 @@ class ShallowFieldConditionalEntry(BaseModel):
     always_when: ConditionalWhen | None = None
     not_when: ConditionalWhen | None = None
 
-    @model_validator(mode="after")
-    def exactly_one_condition(self) -> "ShallowFieldConditionalEntry":
-        conditions = (
-            self.only_when is not None,
-            self.always_when is not None,
-            self.not_when is not None,
-        )
-        if sum(conditions) != 1:
-            error_message ="exactly one of only_when/always_when/not_when required"
-            raise ValueError(error_message)
-        return self
-
 
 class ShallowsectionFields(BaseModel):
     """Field zones for a shallowsection — required, optional, conditional."""
@@ -129,18 +108,6 @@ class ShallowContainerConditionalEntry(BaseModel):
     always_when: ConditionalWhen | None = None
     not_when: ConditionalWhen | None = None
 
-    @model_validator(mode="after")
-    def exactly_one_condition(self) -> "ShallowContainerConditionalEntry":
-        conditions = (
-            self.only_when is not None,
-            self.always_when is not None,
-            self.not_when is not None,
-        )
-        if sum(conditions) != 1:
-            error_message = "exactly one of only_when/always_when/not_when required"
-            raise ValueError(error_message)
-        return self
-
 
 class ShallowContainers(BaseModel):
     """Container zones for a shallowsection — max 3 total containers."""
@@ -150,20 +117,6 @@ class ShallowContainers(BaseModel):
     required: dict[str, ShallowContainerRef] | None = None
     optional: dict[str, ShallowContainerRef] | None = None
     conditional: dict[str, ShallowContainerConditionalEntry] | None = None
-
-    @model_validator(mode="after")
-    def max_three_containers(self) -> "ShallowContainers":
-        count = 0
-        if self.required is not None:
-            count += len(self.required)
-        if self.optional is not None:
-            count += len(self.optional)
-        if self.conditional is not None:
-            count += len(self.conditional)
-        if count > 3:
-            error_message = f"shallowsection allows max 3 containers, got {count}"
-            raise ValueError(error_message)
-        return self
 
 
 class Shallowsection(BaseModel):
@@ -193,18 +146,6 @@ class SchemaSectionConditionalEntry(BaseModel):
     always_when: ConditionalWhen | None = None
     not_when: ConditionalWhen | None = None
 
-    @model_validator(mode="after")
-    def exactly_one_condition(self) -> "SchemaSectionConditionalEntry":
-        conditions = (
-            self.only_when is not None,
-            self.always_when is not None,
-            self.not_when is not None,
-        )
-        if sum(conditions) != 1:
-            error_message ="exactly one of only_when/always_when/not_when required"
-            raise ValueError(error_message)
-        return self
-
 
 class SchemaShallowConditionalEntry(BaseModel):
     """Conditional shallowsection entry for schema shallowsection zones."""
@@ -215,18 +156,6 @@ class SchemaShallowConditionalEntry(BaseModel):
     only_when: ConditionalWhen | None = None
     always_when: ConditionalWhen | None = None
     not_when: ConditionalWhen | None = None
-
-    @model_validator(mode="after")
-    def exactly_one_condition(self) -> "SchemaShallowConditionalEntry":
-        conditions = (
-            self.only_when is not None,
-            self.always_when is not None,
-            self.not_when is not None,
-        )
-        if sum(conditions) != 1:
-            error_message ="exactly one of only_when/always_when/not_when required"
-            raise ValueError(error_message)
-        return self
 
 
 class SchemaSections(BaseModel):
@@ -259,15 +188,3 @@ class Schema(BaseModel):
     description: str
     sections: SchemaSections | None = None
     shallowsections: SchemaShallowsections | None = None
-
-    @model_validator(mode="after")
-    def exactly_one_section_type(self) -> "Schema":
-        has_sections = self.sections is not None
-        has_shallow = self.shallowsections is not None
-        if not has_sections and not has_shallow:
-            error_message ="exactly one of sections/shallowsections must be set, got neither"
-            raise ValueError(error_message)
-        if has_sections and has_shallow:
-            error_message ="sections and shallowsections are mutually exclusive, got both"
-            raise ValueError(error_message)
-        return self

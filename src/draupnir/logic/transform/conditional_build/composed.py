@@ -1,95 +1,70 @@
-"""Conditional schema building — collectors and dispatch.
+"""Conditional schema building — graph-based collectors.
 
-CC=4+ functions that iterate model trees to collect and dispatch
-conditional schema entries. Same-section and cross-section paths.
+CC=4-8 functions. Graph-based collectors walk graph edges for
+cross-section conditional schema entries. Adapts generated input
+model when conditions to canonical ConditionalWhen format.
 
 No IO. Pure model-to-model conversion.
 """
+
+import networkx as nx
+from pydantic import BaseModel, RootModel
 
 from draupnir.logic.transform.conditional_build.simple import (
     build_root_conditional,
     resolve_cross_section_mode,
 )
-from draupnir.structure.model.complex_containers import Group
-from draupnir.structure.model.schema_output import SchemaRootConditional
-from draupnir.structure.model.top_level import (
-    Schema,
-    SchemaSections,
-    SchemaShallowsections,
-    Section,
+from draupnir.logic.transform.zone_collect.simple import (
+    unwrap_when_equals,
+    unwrap_when_in_values,
 )
+from draupnir.structure.model.conditionals import ConditionalWhen
+from draupnir.structure.model.schema_output import SchemaRootConditional
 
 
-def collect_group_conditionals(
-    group: Group,
-    group_path: tuple[str, ...],
-) -> list[SchemaRootConditional]:
-    """Collect cross-section conditionals from a single group."""
-    results: list[SchemaRootConditional] = []
-    if not group.fields or not group.fields.conditional:
-        return results
-    for name, entry in group.fields.conditional.items():
-        resolved = resolve_cross_section_mode(
-            entry.only_when, entry.always_when, entry.not_when,
-        )
-        if resolved is not None:
-            active, mode = resolved
-            results.append(build_root_conditional(active, name, group_path, mode))
-    return results
+def adapt_edge_when(when_wrapper: RootModel | BaseModel | None) -> ConditionalWhen | None:
+    """Convert a generated when RootModel from a graph edge to ConditionalWhen.
+
+    Graph edges carry raw generated input model when conditions.
+    Unwraps to the canonical ConditionalWhen used by conditional builders.
+    """
+    if when_wrapper is None:
+        return None
+    inner = when_wrapper.root if isinstance(when_wrapper, RootModel) else when_wrapper
+    equals_val = unwrap_when_equals(inner)
+    in_tuple = unwrap_when_in_values(inner)
+    has_value_predicate = equals_val is not None or in_tuple is not None
+    return ConditionalWhen(
+        field=inner.field.root, equals=equals_val,
+        in_=in_tuple, exists=None if has_value_predicate else True,
+    )
 
 
-def collect_section_conditionals(
-    section: Section,
+def collect_section_graph_conditionals(
+    section_key: str,
     section_name: str,
+    graph: nx.DiGraph,
 ) -> list[SchemaRootConditional]:
-    """Collect cross-section conditionals from all groups in a section."""
+    """Walk section → group → field edges, collect cross-section conditionals.
+
+    For each conditional field edge, adapts the raw when conditions
+    and builds a SchemaRootConditional with the path (section, group).
+    """
     results: list[SchemaRootConditional] = []
-    containers = section.containers
-    for zone in (containers.required, containers.optional):
-        if not zone:
-            continue
-        for group_name, model in zone.items():
-            if isinstance(model, Group):
-                path = (section_name, group_name)
-                results.extend(collect_group_conditionals(model, path))
-    if containers.conditional:
-        for group_name, entry in containers.conditional.items():
-            if isinstance(entry.ref, Group):
-                path = (section_name, group_name)
-                results.extend(collect_group_conditionals(entry.ref, path))
-    return results
-
-
-def iter_schema_sections(
-    schema: Schema,
-) -> dict[str, Section]:
-    """Iterate all section models from schema zones."""
-    sections: dict[str, Section] = {}
-    zones = schema.sections
-    if not zones:
-        return sections
-    if zones.required:
-        sections.update(zones.required)
-    if zones.optional:
-        sections.update(zones.optional)
-    if zones.conditional:
-        for name, entry in zones.conditional.items():
-            sections[name] = entry.ref
-    return sections
-
-
-def collect_schema_zone_conditionals(
-    zones: SchemaSections | SchemaShallowsections,
-) -> list[SchemaRootConditional]:
-    """Build root conditionals from the schema conditional zone."""
-    results: list[SchemaRootConditional] = []
-    if not zones.conditional:
-        return results
-    for name, entry in zones.conditional.items():
-        resolved = resolve_cross_section_mode(
-            entry.only_when, entry.always_when, entry.not_when,
-        )
-        if resolved is not None:
-            active, mode = resolved
-            results.append(build_root_conditional(active, name, (), mode))
+    for group_key in graph.successors(section_key):
+        group_name = graph[section_key][group_key]["name"]
+        for field_key in graph.successors(group_key):
+            field_edge = graph[group_key][field_key]
+            if field_edge["zone"] != "conditional":
+                continue
+            adapted_only = adapt_edge_when(field_edge.get("only_when"))
+            adapted_always = adapt_edge_when(field_edge.get("always_when"))
+            adapted_not = adapt_edge_when(field_edge.get("not_when"))
+            resolved = resolve_cross_section_mode(adapted_only, adapted_always, adapted_not)
+            if resolved is not None:
+                active, mode = resolved
+                target_path = (section_name, group_name)
+                results.append(build_root_conditional(
+                    active, field_edge["name"], target_path, mode,
+                ))
     return results

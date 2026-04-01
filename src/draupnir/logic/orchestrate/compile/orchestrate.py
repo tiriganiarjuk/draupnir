@@ -14,17 +14,25 @@ from pydantic import BaseModel
 from draupnir.logic.impure.loader.composed import load_all_levels
 from draupnir.logic.impure.pipeline.composed import check_schema_drift, resolve_paths
 from draupnir.logic.impure.pipeline.primitive import schema_filename
-from draupnir.logic.impure.pipeline.simple import args_to_paths, context_to_paths, find_workspace_root
+from draupnir.logic.impure.pipeline.simple import (
+    args_to_paths,
+    context_to_paths,
+    find_workspace_root,
+)
 from draupnir.logic.impure.writer.simple import write_schema
-from draupnir.logic.transform.graph_build.composed import build_graph
+from draupnir.logic.transform.conditional_build.composed import (
+    adapt_edge_when,
+    collect_section_graph_conditionals,
+)
+from draupnir.logic.transform.conditional_build.simple import (
+    build_root_conditional,
+    resolve_cross_section_mode,
+)
+from draupnir.logic.transform.graph_build.composed import build_graph, subtree_build_order
 from draupnir.logic.transform.graph_build.primitive import cache_key_to_defs_key
+from draupnir.logic.transform.graph_build.simple import schema_shared_keys
 from draupnir.logic.transform.schema_assembly.assembled import assemble_schema
 from draupnir.logic.transform.schema_assembly.composed import assemble_fragment
-from draupnir.logic.transform.conditional_build.composed import (
-    collect_schema_zone_conditionals,
-    collect_section_conditionals,
-    iter_schema_sections,
-)
 from draupnir.logic.transform.schema_build.assembled import (
     build_group,
     build_section,
@@ -53,52 +61,69 @@ from draupnir.structure.model.schema_output import (
     SchemaRef,
     SchemaRootConditional,
 )
-from draupnir.structure.model.top_level import (
-    Schema,
-    SchemaSections,
-    SchemaShallowsections,
-)
 
 
 # --- Conditional assembly ---
 
 
-def collect_schema_conditionals(
-    schema: Schema,
-) -> tuple[SchemaRootConditional, ...] | None:
-    """Collect all cross-section conditionals from a Schema."""
-    results: list[SchemaRootConditional] = []
-    for name, section in iter_schema_sections(schema).items():
-        results.extend(collect_section_conditionals(section, name))
-    if not results:
+def build_edge_zone_conditional(
+    edge_data: dict[str, BaseModel | str | None],
+    section_name: str,
+) -> SchemaRootConditional | None:
+    """Build a zone conditional from a schema→section edge, or None.
+
+    Returns None if the edge is not a conditional zone or if the when
+    condition is not cross-section.
+    """
+    if edge_data["zone"] != "conditional":
         return None
-    return tuple(results)
+    adapted_only = adapt_edge_when(edge_data.get("only_when"))
+    adapted_always = adapt_edge_when(edge_data.get("always_when"))
+    adapted_not = adapt_edge_when(edge_data.get("not_when"))
+    resolved = resolve_cross_section_mode(adapted_only, adapted_always, adapted_not)
+    if resolved is None:
+        return None
+    active, mode = resolved
+    return build_root_conditional(active, section_name, (), mode)
 
 
-def merge_all_conditionals(
-    schema: Schema,
-    zones: SchemaSections | SchemaShallowsections,
-) -> tuple[SchemaRootConditional, ...] | None:
-    """Merge schema zone conditionals with cross-section conditionals."""
-    results: list[SchemaRootConditional] = []
-    results.extend(collect_schema_zone_conditionals(zones))
-    cross_section = collect_schema_conditionals(schema)
-    if cross_section:
-        results.extend(cross_section)
-    return tuple(results) if results else None
-
-
-# --- Graph compile loop ---
-
-
-def compile_graph(
+def collect_graph_conditionals(
+    schema_key: str,
     graph: nx.DiGraph,
-) -> tuple[BuildContext, dict[str, BaseModel]]:
-    """Walk graph in topological order, build each node, detect $defs.
+) -> list[SchemaRootConditional]:
+    """Collect cross-section conditionals by walking graph edges.
 
-    Returns (context, defs) where context.built/full hold all results
-    and defs holds nodes with in-degree >= 2 (shared across parents).
-    Schema-level nodes are skipped — assembled separately.
+    Iterates schema → section edges for zone conditionals, then
+    delegates section → group → field traversal to the composed layer.
+    """
+    results: list[SchemaRootConditional] = []
+    for section_key in graph.successors(schema_key):
+        if graph.nodes[section_key]["level"] != "section":
+            continue
+        schema_edge = graph[schema_key][section_key]
+        section_name = schema_edge["name"]
+        zone_cond = build_edge_zone_conditional(schema_edge, section_name)
+        if zone_cond is not None:
+            results.append(zone_cond)
+        results.extend(collect_section_graph_conditionals(
+            section_key, section_name, graph,
+        ))
+    return results
+
+
+# --- Per-schema compile ---
+
+
+def compile_subtree(
+    root_key: str,
+    graph: nx.DiGraph,
+    shared: frozenset[str],
+) -> tuple[BuildContext, dict[str, BaseModel]]:
+    """Build a subtree with per-root $defs promotion.
+
+    Walks descendants of root_key in topological order. Nodes in the
+    shared set are promoted to $defs; all others are inlined. Returns
+    a fresh context and defs scoped to this root.
     """
     dispatch = {
         "pattern": build_pattern,
@@ -116,18 +141,16 @@ def compile_graph(
         "section": build_section,
         "shallowsection": build_shallowsection,
     }
-    order = list(reversed(list(nx.topological_sort(graph))))
+    order = subtree_build_order(root_key, graph)
     context = BuildContext()
     defs: dict[str, BaseModel] = {}
     for cache_key in order:
         level = graph.nodes[cache_key]["level"]
-        if level == "schema":
-            continue
         model = graph.nodes[cache_key]["model"]
         result = dispatch[level](model, context)
         context.full[cache_key] = result
         context.built[cache_key] = result
-        if graph.in_degree(cache_key) >= 2:
+        if cache_key in shared:
             defs_key = cache_key_to_defs_key(cache_key)
             defs[defs_key] = result
             context.built[cache_key] = SchemaRef(ref=f"#/$defs/{defs_key}")
@@ -139,8 +162,6 @@ def compile_graph(
 
 def export_all_schemas(
     graph: nx.DiGraph,
-    context: BuildContext,
-    defs: dict[str, BaseModel],
 ) -> dict[str, SchemaDocument]:
     """Assemble SchemaDocuments for all schema-level nodes in the graph."""
     schemas: dict[str, SchemaDocument] = {}
@@ -148,54 +169,61 @@ def export_all_schemas(
         if graph.nodes[cache_key]["level"] != "schema":
             continue
         model = graph.nodes[cache_key]["model"]
-        schemas[cache_key] = assemble_schema(cache_key, model, context, defs)
+        shared = schema_shared_keys(cache_key, graph)
+        context, defs = compile_subtree(cache_key, graph, shared)
+        schema_doc = assemble_schema(cache_key, model, graph, context, defs)
+        conditionals = collect_graph_conditionals(cache_key, graph)
+        if conditionals:
+            schema_doc = schema_doc.model_copy(update={"all_of": tuple(conditionals)})
+        schemas[cache_key] = schema_doc
     return schemas
 
 
 def export_fragments(
-    context: BuildContext,
-    defs: dict[str, BaseModel],
+    graph: nx.DiGraph,
 ) -> dict[str, FragmentDocument]:
     """Assemble FragmentDocuments for all registered fragments."""
     fragments: dict[str, FragmentDocument] = {}
     for fragment in Fragment:
-        if fragment.value in context.full:
-            fragments[fragment.name] = assemble_fragment(
-                fragment.value, context, defs,
-            )
+        fragment_key = fragment.value
+        if fragment_key not in graph.nodes:
+            continue
+        shared = schema_shared_keys(fragment_key, graph)
+        context, defs = compile_subtree(fragment_key, graph, shared)
+        fragments[fragment.name] = assemble_fragment(
+            fragment_key, fragment.name, context, defs,
+        )
     return fragments
 
 
 # --- Pipeline modes ---
 
 
-def load_and_compile(
+def load_and_build_graph(
     verdandi_root: Path,
-) -> tuple[nx.DiGraph, BuildContext, dict[str, BaseModel]] | str:
-    """Load all levels, build graph, compile. Returns (graph, ctx, defs) or error."""
+) -> nx.DiGraph | str:
+    """Load all levels, build graph. Returns graph or error string."""
     cache: dict[str, BaseModel] = {}
     errors = load_all_levels(verdandi_root, cache)
     if errors:
         return "\n".join(errors)
-    graph = build_graph(cache)
-    context, defs = compile_graph(graph)
-    return graph, context, defs
+    return build_graph(cache)
 
 
 def run_generate(
     verdandi_root: Path,
     output_dir: Path,
 ) -> int:
-    """Load, compile, export all schemas and fragments, write to disk."""
-    result = load_and_compile(verdandi_root)
+    """Load, build graph, export all schemas and fragments, write to disk."""
+    result = load_and_build_graph(verdandi_root)
     if isinstance(result, str):
         sys.stderr.write(result + "\n")
         return 1
-    graph, context, defs = result
-    schemas = export_all_schemas(graph, context, defs)
+    graph = result
+    schemas = export_all_schemas(graph)
     for cache_key, document in schemas.items():
         write_schema(document, output_dir / schema_filename(cache_key))
-    fragments = export_fragments(context, defs)
+    fragments = export_fragments(graph)
     for name, document in fragments.items():
         write_schema(document, output_dir / f"{name.replace('_', '-')}.schema.json")
     return 0
@@ -205,13 +233,12 @@ def run_check(
     verdandi_root: Path,
     output_dir: Path,
 ) -> int:
-    """Load, compile, compare against on-disk schemas."""
-    result = load_and_compile(verdandi_root)
+    """Load, build graph, compare against on-disk schemas."""
+    result = load_and_build_graph(verdandi_root)
     if isinstance(result, str):
         sys.stderr.write(result + "\n")
         return 1
-    graph, context, defs = result
-    schemas = export_all_schemas(graph, context, defs)
+    schemas = export_all_schemas(result)
     messages = check_schema_drift(schemas, output_dir)
     for message in messages:
         sys.stderr.write(message + "\n")
@@ -222,13 +249,12 @@ def run_fragments(
     verdandi_root: Path,
     output_dir: Path,
 ) -> int:
-    """Load, compile, export and write fragments only."""
-    result = load_and_compile(verdandi_root)
+    """Load, build graph, export and write fragments only."""
+    result = load_and_build_graph(verdandi_root)
     if isinstance(result, str):
         sys.stderr.write(result + "\n")
         return 1
-    _graph, context, defs = result
-    fragments = export_fragments(context, defs)
+    fragments = export_fragments(result)
     for name, document in fragments.items():
         write_schema(document, output_dir / f"{name.replace('_', '-')}.schema.json")
     return 0

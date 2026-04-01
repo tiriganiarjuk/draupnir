@@ -12,7 +12,7 @@ from draupnir.logic.transform.field_annotate.composed import (
     compute_field_metadata,
 )
 from draupnir.logic.transform.schema_build.primitive import merge_zone_results
-from draupnir.logic.transform.schema_build.simple import build_field_ref, optional_tuple
+from draupnir.logic.transform.schema_build.simple import build_field_ref, optional_tuple, unwrap_zone
 from draupnir.logic.transform.zone_collect.composed import collect_conditional
 from draupnir.logic.transform.zone_collect.simple import collect_required_optional
 from draupnir.structure.config.build_context import BuildContext
@@ -21,13 +21,6 @@ from draupnir.structure.model.schema_output import (
     SchemaObject,
     SchemaRef,
 )
-
-
-def unwrap_zone(zone: RootModel | None) -> dict[str, RootModel] | None:
-    """Unwrap a RootModel zone wrapper to get the underlying dict or None."""
-    if zone is None:
-        return None
-    return zone.root
 
 
 def build_container_schema(

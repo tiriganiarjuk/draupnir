@@ -24,6 +24,13 @@ def optional_tuple[T](items: list[T]) -> tuple[T, ...] | None:
     return tuple(items) if items else None
 
 
+def unwrap_zone(zone: RootModel | None) -> dict[str, RootModel] | None:
+    """Unwrap a RootModel zone wrapper to get the underlying dict or None."""
+    if zone is None:
+        return None
+    return zone.root
+
+
 def build_items_or_one_of(
     items_wrapper: RootModel,
     context: BuildContext,
@@ -67,17 +74,6 @@ def build_union(model: BaseModel, context: BuildContext) -> SchemaOneOfField:
 
 def build_array(model: BaseModel, context: BuildContext) -> SchemaArray:
     """Array -> {type: array, items: object_or_oneOf}."""
-    items = build_items_or_one_of(model.items, context)
-    return SchemaArray(
-        title=model.title.root,
-        items=items,
-        description=model.description.root,
-        min_items=1,
-    )
-
-
-def build_superarray(model: BaseModel, context: BuildContext) -> SchemaArray:
-    """Superarray -> {type: array, items: object_or_oneOf}."""
     items = build_items_or_one_of(model.items, context)
     return SchemaArray(
         title=model.title.root,

@@ -1,8 +1,8 @@
-"""Schema pipeline orchestration — wire all zones together.
+"""Schema pipeline orchestration — compile, export, and run pipeline modes.
 
 Orchestrate level (CC=1-5). Compiles the dependency graph via topological
 sort, dispatches each node to its builder, detects $defs from in-degree,
-assembles conditionals, and routes pipeline modes.
+exports assembled schemas and fragments, and routes pipeline modes.
 """
 
 import sys
@@ -12,24 +12,25 @@ import networkx as nx
 from pydantic import BaseModel
 
 from draupnir.logic.impure.loader.composed import load_all_levels
-from draupnir.logic.impure.pipeline.composed import resolve_paths
-from draupnir.logic.impure.pipeline.primitive import fragment_output_name, schema_filename
+from draupnir.logic.impure.pipeline.composed import check_schema_drift, resolve_paths
+from draupnir.logic.impure.pipeline.primitive import schema_filename
 from draupnir.logic.impure.pipeline.simple import args_to_paths, context_to_paths, find_workspace_root
 from draupnir.logic.impure.writer.simple import write_schema
 from draupnir.logic.transform.graph_build.composed import build_graph
+from draupnir.logic.transform.graph_build.primitive import cache_key_to_defs_key
+from draupnir.logic.transform.schema_assembly.assembled import assemble_schema
+from draupnir.logic.transform.schema_assembly.composed import assemble_fragment
 from draupnir.logic.transform.conditional_build.composed import (
     collect_schema_zone_conditionals,
     collect_section_conditionals,
     iter_schema_sections,
 )
-from draupnir.logic.transform.graph_build.primitive import cache_key_to_defs_key
 from draupnir.logic.transform.schema_build.assembled import (
     build_group,
     build_section,
     build_shallowsection,
     build_simplegroup,
     build_verdandi_field,
-    unwrap_zone,
 )
 from draupnir.logic.transform.schema_build.composed import build_atom
 from draupnir.logic.transform.schema_build.primitive import (
@@ -40,12 +41,9 @@ from draupnir.logic.transform.schema_build.primitive import (
 from draupnir.logic.transform.schema_build.simple import (
     build_array,
     build_element,
-    build_superarray,
     build_tuple,
     build_union,
-    optional_tuple,
 )
-from draupnir.logic.transform.zone_collect.simple import build_zone_properties
 from draupnir.structure.config.build_context import BuildContext
 from draupnir.structure.config.fragments import Fragment
 from draupnir.structure.config.pipeline import PipelineArgs, PipelineContext, PipelineMode
@@ -62,7 +60,7 @@ from draupnir.structure.model.top_level import (
 )
 
 
-# --- Conditional assembly (CC=3, orchestrate) ---
+# --- Conditional assembly ---
 
 
 def collect_schema_conditionals(
@@ -114,7 +112,7 @@ def compile_graph(
         "simplegroup": build_simplegroup,
         "array": build_array,
         "group": build_group,
-        "superarray": build_superarray,
+        "superarray": build_array,
         "section": build_section,
         "shallowsection": build_shallowsection,
     }
@@ -136,76 +134,7 @@ def compile_graph(
     return context, defs
 
 
-# --- Schema assembly ---
-
-
-def collect_section_zone_properties(
-    zones: BaseModel | None,
-    context: BuildContext,
-) -> tuple[dict[str, BaseModel], list[str]]:
-    """Collect properties and required keys from a schema zone set.
-
-    Handles .required and .optional zone dicts. Each zone dict value
-    is a RootModel[str] section ref — looked up from context.built.
-    """
-    if zones is None:
-        return {}, []
-    req_dict = unwrap_zone(zones.required)
-    opt_dict = unwrap_zone(zones.optional)
-    req_props = build_zone_properties(req_dict, context) if req_dict else {}
-    opt_props = build_zone_properties(opt_dict, context) if opt_dict else {}
-    return {**req_props, **opt_props}, list(req_props.keys())
-
-
-def assemble_schema(
-    cache_key: str,
-    model: BaseModel,
-    context: BuildContext,
-    defs: dict[str, BaseModel],
-) -> SchemaDocument:
-    """Assemble a SchemaDocument from a compiled schema model.
-
-    Collects section properties from sections + shallowsections zones,
-    builds required list, attaches $defs.
-    """
-    sec_props, sec_req = collect_section_zone_properties(model.sections, context)
-    shallow_props, shallow_req = collect_section_zone_properties(
-        model.shallowsections, context,
-    )
-    properties = {**sec_props, **shallow_props}
-    required_keys = sec_req + shallow_req
-    schema_name = cache_key.split("/", 1)[1]
-    return SchemaDocument(
-        schema_uri="https://json-schema.org/draft/2020-12/schema",
-        schema_id=schema_name,
-        title=model.title.root,
-        description=model.description.root,
-        required=optional_tuple(required_keys),
-        properties=properties,
-        additional_properties=False,
-        defs=defs or None,
-    )
-
-
-def assemble_fragment(
-    cache_key: str,
-    context: BuildContext,
-    defs: dict[str, BaseModel],
-) -> FragmentDocument:
-    """Assemble a FragmentDocument from a compiled cache entry.
-
-    Uses context.full for the root (in case it's a SchemaRef in context.built).
-    """
-    root_schema = context.full[cache_key]
-    fragment_name = cache_key.replace("/", "_")
-    return FragmentDocument(
-        schema_uri="https://json-schema.org/draft/2020-12/schema",
-        schema_id=f"include_{fragment_name}",
-        title=root_schema.title or fragment_name,
-        description=root_schema.description or "",
-        properties={"items": root_schema} if hasattr(root_schema, "items") else {},
-        defs=defs or None,
-    )
+# --- Schema export ---
 
 
 def export_all_schemas(
@@ -253,11 +182,11 @@ def load_and_compile(
     return graph, context, defs
 
 
-def run_all(
+def run_generate(
     verdandi_root: Path,
     output_dir: Path,
 ) -> int:
-    """Load everything, export all schemas, write all files."""
+    """Load, compile, export all schemas and fragments, write to disk."""
     result = load_and_compile(verdandi_root)
     if isinstance(result, str):
         sys.stderr.write(result + "\n")
@@ -272,28 +201,11 @@ def run_all(
     return 0
 
 
-def check_schema_drift(
-    schemas: dict[str, SchemaDocument],
-    output_dir: Path,
-) -> list[str]:
-    """Compare compiled schemas against on-disk. Returns list of drift messages."""
-    messages: list[str] = []
-    for cache_key, document in schemas.items():
-        path = output_dir / schema_filename(cache_key)
-        if not path.exists():
-            messages.append(f"missing: {path}")
-            continue
-        expected = document.model_dump_json(by_alias=True, exclude_none=True, indent=2)
-        if path.read_text().rstrip() != expected:
-            messages.append(f"drifted: {path}")
-    return messages
-
-
 def run_check(
     verdandi_root: Path,
     output_dir: Path,
 ) -> int:
-    """Check for drift without writing."""
+    """Load, compile, compare against on-disk schemas."""
     result = load_and_compile(verdandi_root)
     if isinstance(result, str):
         sys.stderr.write(result + "\n")
@@ -310,7 +222,7 @@ def run_fragments(
     verdandi_root: Path,
     output_dir: Path,
 ) -> int:
-    """Export standalone include-fragment schemas."""
+    """Load, compile, export and write fragments only."""
     result = load_and_compile(verdandi_root)
     if isinstance(result, str):
         sys.stderr.write(result + "\n")
@@ -322,8 +234,11 @@ def run_fragments(
     return 0
 
 
-def run_list(verdandi_root: Path) -> int:
-    """List available schemas."""
+def run_list(
+    verdandi_root: Path,
+    output_dir: Path,
+) -> int:
+    """Load levels and list available schema names. Ignores output_dir."""
     cache: dict[str, BaseModel] = {}
     errors = load_all_levels(verdandi_root, cache)
     if errors:
@@ -335,7 +250,7 @@ def run_list(verdandi_root: Path) -> int:
     return 0
 
 
-# --- CLI routing (unchanged) ---
+# --- CLI routing ---
 
 
 def resolve_mode(
@@ -373,18 +288,6 @@ def resolve_workspace(
     return resolve_paths(verdandi_dir, output_dir, resolved_workspace, project)
 
 
-def dispatch_mode(context: PipelineContext) -> int:
-    """Route to the appropriate pipeline mode."""
-    verdandi, output = context_to_paths(context)
-    if context.mode == PipelineMode.check:
-        return run_check(verdandi, output)
-    if context.mode == PipelineMode.list_schemas:
-        return run_list(verdandi)
-    if context.mode == PipelineMode.fragments:
-        return run_fragments(verdandi, output)
-    return run_all(verdandi, output)
-
-
 def resolve_context(args: PipelineArgs) -> PipelineContext | str:
     """Resolve raw CLI args into a validated pipeline context."""
     mode = resolve_mode(args.check, args.list_schemas, args.fragments)
@@ -403,9 +306,16 @@ def resolve_context(args: PipelineArgs) -> PipelineContext | str:
 
 
 def run_pipeline(args: PipelineArgs) -> int:
-    """Full pipeline: resolve context, dispatch."""
+    """Resolve CLI args and dispatch to the appropriate pipeline mode."""
     context = resolve_context(args)
     if isinstance(context, str):
         sys.stderr.write(context + "\n")
         return 1
-    return dispatch_mode(context)
+    verdandi, output = context_to_paths(context)
+    mode_dispatch = {
+        PipelineMode.generate: run_generate,
+        PipelineMode.check: run_check,
+        PipelineMode.list_schemas: run_list,
+        PipelineMode.fragments: run_fragments,
+    }
+    return mode_dispatch[context.mode](verdandi, output)

@@ -6,7 +6,7 @@ are mutually exclusive alternatives.
 
 import typer
 
-from draupnir.logic.entry_point import run_pipeline
+from draupnir.logic.orchestrate.compile.orchestrate import run_pipeline
 from draupnir.structure.config.pipeline import PipelineArgs
 
 app = typer.Typer(help="Generate JSON Schema from Verdandi YAML.")

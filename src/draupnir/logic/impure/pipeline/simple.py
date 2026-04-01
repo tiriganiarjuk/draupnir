@@ -8,6 +8,11 @@ from pathlib import Path
 from draupnir.structure.config.pipeline import PipelineArgs, PipelineContext
 
 
+def path_or_default(explicit: Path | None, fallback: Path) -> Path:
+    """Return explicit path if given, otherwise the fallback."""
+    return explicit or fallback
+
+
 def optional_path(value: str | None) -> Path | None:
     """Convert optional string to optional Path."""
     return Path(value) if value else None

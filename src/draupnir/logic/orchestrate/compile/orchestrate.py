@@ -16,10 +16,10 @@ from draupnir.logic.impure.dispatch.primitive import cache_key_to_defs_key
 from draupnir.logic.impure.loader.primitive import extract_cache_name
 from draupnir.logic.impure.loader.assembled import load_all_levels
 from draupnir.logic.impure.pipeline.composed import resolve_paths
-from draupnir.logic.impure.pipeline.primitive import schema_filename
-from draupnir.logic.impure.pipeline.simple import args_to_paths, context_to_paths, find_workspace_root, optional_str
+from draupnir.logic.impure.pipeline.primitive import fragment_output_name, schema_filename
+from draupnir.logic.impure.pipeline.simple import args_to_paths, context_to_paths, find_workspace_root
 from draupnir.logic.impure.writer.primitive import serialize_schema
-from draupnir.logic.impure.writer.simple import write_schema, write_sidecar
+from draupnir.logic.impure.writer.simple import write_schema
 from draupnir.logic.pure.tree_walk.composed import count_refs
 from draupnir.logic.pure.tree_walk.primitive import wrap_array_as_object
 from draupnir.logic.pure.tree_walk.simple import reverse_cache_index, shared_keys
@@ -215,9 +215,8 @@ def export_all_schemas(
 def run_all(
     verdandi_root: Path,
     output_dir: Path,
-    workspace_root: Path,
 ) -> int:
-    """Load everything, export all schemas, write all files + sidecars."""
+    """Load everything, export all schemas, write all files."""
     cache: dict[str, BaseModel] = {}
     load_all_levels(verdandi_root, cache, resolve_refs)
     if not cache:
@@ -230,7 +229,6 @@ def run_all(
     for schema_key, document in schemas.items():
         output_path = output_dir / schema_filename(schema_key)
         write_schema(document, output_path)
-        write_sidecar(output_path, workspace_root)
         sys.stdout.write(f"wrote {output_path.name}\n")
     return 0
 
@@ -258,7 +256,6 @@ def run_check(
 def run_fragments(
     verdandi_root: Path,
     output_dir: Path,
-    workspace_root: Path,
 ) -> int:
     """Export standalone include-fragment schemas."""
     cache: dict[str, BaseModel] = {}
@@ -268,7 +265,7 @@ def run_fragments(
         if model is None:
             sys.stderr.write(f"ERROR: {fragment.value} not in cache\n")
             return 1
-        schema_id = f"{fragment.output_name}.schema.json"
+        schema_id = f"{fragment_output_name(fragment)}.schema.json"
         built, defs = export_fragment(model, cache)
         document = FragmentDocument(
             schema_uri="https://json-schema.org/draft/2020-12/schema",
@@ -282,7 +279,6 @@ def run_fragments(
         )
         output_path = output_dir / schema_id
         write_schema(document, output_path)
-        write_sidecar(output_path, workspace_root)
         sys.stdout.write(f"wrote {output_path.name}\n")
     return 0
 
@@ -334,14 +330,14 @@ def resolve_workspace(
 
 def dispatch_mode(context: PipelineContext) -> int:
     """Route to the appropriate pipeline mode."""
-    verdandi, output, workspace = context_to_paths(context)
+    verdandi, output = context_to_paths(context)
     if context.mode == PipelineMode.check:
         return run_check(verdandi, output)
     if context.mode == PipelineMode.list_schemas:
         return run_list(verdandi)
     if context.mode == PipelineMode.fragments:
-        return run_fragments(verdandi, output, workspace)
-    return run_all(verdandi, output, workspace)
+        return run_fragments(verdandi, output)
+    return run_all(verdandi, output)
 
 
 def resolve_context(args: PipelineArgs) -> PipelineContext | str:
@@ -358,7 +354,6 @@ def resolve_context(args: PipelineArgs) -> PipelineContext | str:
         mode=mode,
         verdandi=str(verdandi),
         output=str(output),
-        workspace=optional_str(workspace),
     )
 
 

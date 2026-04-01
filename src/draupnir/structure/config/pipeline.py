@@ -39,4 +39,3 @@ class PipelineContext(BaseModel):
     mode: PipelineMode
     verdandi: str
     output: str
-    workspace: str | None = None

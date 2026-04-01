@@ -17,8 +17,3 @@ class Fragment(Enum):
     include_example_group = "group/example_group_reduced"
     include_guardrails_constraints = "simplearray/guardrails_constraints"
     include_guardrails_anti_patterns = "simplearray/guardrails_anti_patterns"
-
-    @property
-    def output_name(self) -> str:
-        """Fragment output name with hyphens: 'include-success-criteria'."""
-        return self.name.replace("_", "-")

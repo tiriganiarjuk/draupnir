@@ -13,11 +13,6 @@ def optional_path(value: str | None) -> Path | None:
     return Path(value) if value else None
 
 
-def optional_str(value: Path | None) -> str | None:
-    """Convert optional Path to optional string."""
-    return str(value) if value else None
-
-
 def args_to_paths(
     args: PipelineArgs,
 ) -> tuple[Path | None, Path | None, Path | None]:
@@ -25,9 +20,9 @@ def args_to_paths(
     return optional_path(args.verdandi_dir), optional_path(args.output_dir), optional_path(args.workspace)
 
 
-def context_to_paths(context: PipelineContext) -> tuple[Path, Path, Path | None]:
+def context_to_paths(context: PipelineContext) -> tuple[Path, Path]:
     """Extract and convert paths from a resolved pipeline context."""
-    return Path(context.verdandi), Path(context.output), optional_path(context.workspace)
+    return Path(context.verdandi), Path(context.output)
 
 
 def find_workspace_root(start: Path) -> Path | None:

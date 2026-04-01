@@ -1,6 +1,7 @@
-"""Conditional schema building — single-expression constructors.
+"""Same-section conditional schema building — single-expression constructors.
 
-CC=1 builders for conditional schema nodes. No branching.
+CC=1. Builds if/then/else schema nodes for same-section conditional entries.
+No branching.
 """
 
 from draupnir.structure.model.schema_output import (
@@ -32,19 +33,3 @@ def build_not_when(field_name: str, if_clause: SchemaCondition) -> SchemaConditi
         if_=if_clause,
         then_=SchemaCondition(properties={field_name: False}),
     )
-
-
-def strip_cross_section_marker(field_path: str) -> str:
-    """Remove leading dot from cross-section field path."""
-    return field_path.lstrip(".")
-
-
-def split_dotted_path(path: str) -> tuple[tuple[str, ...], str]:
-    """Split dotted path into (parent_segments, leaf_name)."""
-    segments = tuple(path.split("."))
-    return segments[:-1], segments[-1]
-
-
-def parse_cross_section_path(field_path: str) -> tuple[tuple[str, ...], str]:
-    """Parse cross-section path: '.a.b.c' -> (('a', 'b'), 'c')."""
-    return split_dotted_path(strip_cross_section_marker(field_path))

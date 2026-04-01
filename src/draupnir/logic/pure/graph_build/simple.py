@@ -8,7 +8,7 @@ Unwraps RootModel wrappers used by generated input models.
 import networkx as nx
 from pydantic import BaseModel, RootModel
 
-from draupnir.logic.transform.graph_build.primitive import is_known_level, ref_prefix
+from draupnir.logic.pure.graph_build.primitive import is_known_level, ref_prefix
 from draupnir.structure.config.edge_ref import EdgeRef
 
 

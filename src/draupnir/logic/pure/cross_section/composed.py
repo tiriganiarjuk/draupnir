@@ -1,20 +1,18 @@
-"""Conditional schema building — graph-based collectors.
+"""Cross-section conditional collection — graph-based collectors.
 
-CC=4-8 functions. Graph-based collectors walk graph edges for
-cross-section conditional schema entries. Adapts generated input
-model when conditions to canonical ConditionalWhen format.
+CC=4-8. Graph-based collectors walk graph edges for cross-section
+conditional schema entries. Adapts generated input model when
+conditions to canonical ConditionalWhen format.
 
-No IO. Pure model-to-model conversion.
+No IO. Pure business logic.
 """
 
 import networkx as nx
 from pydantic import BaseModel, RootModel
 
-from draupnir.logic.transform.conditional_build.simple import (
+from draupnir.logic.pure.cross_section.simple import (
     build_root_conditional,
     resolve_cross_section_mode,
-)
-from draupnir.logic.transform.zone_collect.simple import (
     unwrap_when_equals,
     unwrap_when_in_values,
 )
@@ -45,7 +43,7 @@ def collect_section_graph_conditionals(
     section_name: str,
     graph: nx.DiGraph,
 ) -> list[SchemaRootConditional]:
-    """Walk section → group → field edges, collect cross-section conditionals.
+    """Walk section -> group -> field edges, collect cross-section conditionals.
 
     For each conditional field edge, adapts the raw when conditions
     and builds a SchemaRootConditional with the path (section, group).

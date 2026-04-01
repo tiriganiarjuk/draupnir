@@ -20,17 +20,17 @@ from draupnir.logic.impure.pipeline.simple import (
     find_workspace_root,
 )
 from draupnir.logic.impure.writer.simple import write_schema
-from draupnir.logic.transform.conditional_build.composed import (
+from draupnir.logic.pure.cross_section.composed import (
     adapt_edge_when,
     collect_section_graph_conditionals,
 )
-from draupnir.logic.transform.conditional_build.simple import (
+from draupnir.logic.pure.cross_section.simple import (
     build_root_conditional,
     resolve_cross_section_mode,
 )
-from draupnir.logic.transform.graph_build.composed import build_graph, subtree_build_order
-from draupnir.logic.transform.graph_build.primitive import cache_key_to_defs_key
-from draupnir.logic.transform.graph_build.simple import schema_shared_keys
+from draupnir.logic.pure.graph_build.composed import build_graph, subtree_build_order
+from draupnir.logic.pure.graph_build.primitive import cache_key_to_defs_key
+from draupnir.logic.pure.graph_build.simple import schema_shared_keys
 from draupnir.logic.transform.schema_assembly.assembled import assemble_schema
 from draupnir.logic.transform.schema_assembly.composed import assemble_fragment
 from draupnir.logic.transform.schema_build.assembled import (

@@ -23,8 +23,10 @@ from draupnir.logic.transform.field_annotate.simple import (
     convert_semantic,
     default_override,
     extension_overrides,
+    extract_type_max_length,
     extract_type_min_length,
     field_overrides,
+    resolve_field_max_length,
     resolve_field_min_length,
     unwrap_string_or_none,
 )
@@ -88,10 +90,13 @@ def compute_field_metadata(
     semantic = convert_semantic(field_model.semantic) if field_model.semantic else None
     field_min = field_model.min_length.root if field_model.min_length else None
     type_min = extract_type_min_length(inner_schema)
-    override = resolve_field_min_length(field_min, type_min)
+    min_override = resolve_field_min_length(field_min, type_min)
+    field_max = field_model.max_length.root if field_model.max_length else None
+    type_max = extract_type_max_length(inner_schema)
+    max_override = resolve_field_max_length(field_max, type_max)
     constraint_entries = convert_constraints(field_model.constraint) if field_model.constraint else None
     constraint = SchemaConstraintBlock(constraints=constraint_entries) if constraint_entries else None
     return FieldMeta(
-        description=combined, min_length=override,
+        description=combined, min_length=min_override, max_length=max_override,
         semantic=semantic, constraint=constraint,
     )

@@ -201,6 +201,7 @@ class FieldMeta(BaseModel):
 
     description: str
     min_length: int | None = None
+    max_length: int | None = None
     semantic: SchemaSemanticExt | None = None
     constraint: SchemaConstraintBlock | None = None
 
@@ -225,6 +226,7 @@ class SchemaRef(BaseModel):
     const: str | None = None
     default: str | int | bool | list[str] | None = None
     min_length: int | None = Field(default=None, alias="minLength")
+    max_length: int | None = Field(default=None, alias="maxLength")
     x_semantic: SchemaSemanticExt | None = Field(
         default=None,
         alias="x-semantic",
@@ -253,6 +255,7 @@ class SchemaField(BaseModel):
     default: str | bool | int | None = None
     minimum: int | None = None
     min_length: int | None = Field(default=None, alias="minLength")
+    max_length: int | None = Field(default=None, alias="maxLength")
     not_: SchemaPatternConstraint | SchemaAnyOfConstraint | None = Field(
         default=None,
         alias="not",

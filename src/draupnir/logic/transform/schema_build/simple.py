@@ -25,7 +25,6 @@ from draupnir.structure.model.schema_output import (
     SchemaTupleArray,
 )
 
-
 def optional_tuple[T](items: list[T]) -> tuple[T, ...] | None:
     """Convert list to tuple, or None if empty.
 
@@ -115,7 +114,8 @@ def build_field_ref(
     const_value = field_model.const.root if field_model.const else None
     return SchemaRef(
         ref=ref_string, title=field_model.title.root, description=meta.description,
-        default=default_value, const=const_value, min_length=meta.min_length,
+        default=default_value, const=const_value,
+        min_length=meta.min_length, max_length=meta.max_length,
         x_semantic=meta.semantic, x_constraint=meta.constraint,
     )
 

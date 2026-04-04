@@ -23,6 +23,7 @@ from draupnir.structure.model.schema_output import (
 )
 
 
+
 def build_excludes(
     exclude_refs: list[RootModel],
     context: BuildContext,
@@ -58,11 +59,32 @@ def build_atom(model: BaseModel, context: BuildContext) -> SchemaField:
     excludes_list = model.excludes.root if model.excludes else None
     not_constraint = build_excludes(excludes_list, context) if excludes_list else None
     min_length = model.min_length.root if model.min_length else None
+    max_length = model.max_length.root if model.max_length else None
     return SchemaField(
         title=model.title.root,
         type=model.type.value,
         pattern=pattern,
         min_length=min_length,
+        max_length=max_length,
         not_=not_constraint,
         description=model.description.root,
     )
+
+
+def resolve_array_constraints(
+    model: BaseModel,
+) -> dict[str, int | bool | None]:
+    """Extract optional array constraints from a generated input model.
+
+    Returns kwargs suitable for SchemaArray construction. Defaults
+    min_items to 1 (Verdandi arrays are non-empty) when unspecified.
+    Works with Simplearray, Array, and Superarray input models — all
+    carry the same optional min_items/max_items/unique_items fields.
+    """
+    return {
+        "min_items": model.min_items.root if model.min_items else 1,
+        "max_items": model.max_items.root if model.max_items else None,
+        "unique_items": model.unique_items.root if model.unique_items else None,
+    }
+
+

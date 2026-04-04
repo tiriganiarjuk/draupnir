@@ -40,6 +40,7 @@ class Atom(BaseModel):
     pattern: PatternRef | None = None
     excludes: tuple[PatternRef, ...] | None = None
     min_length: int | None = None
+    max_length: int | None = None
     description: str
 
 

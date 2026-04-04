@@ -52,6 +52,9 @@ class Array(BaseModel):
 
     title: str
     items: SimplegroupRef | ArrayOneOf
+    min_items: int | None = None
+    max_items: int | None = None
+    unique_items: bool | None = None
     description: str
 
 
@@ -140,4 +143,7 @@ class Superarray(BaseModel):
 
     title: str
     items: GroupOrSimplegroupRef | SuperarrayOneOf
+    min_items: int | None = None
+    max_items: int | None = None
+    unique_items: bool | None = None
     description: str

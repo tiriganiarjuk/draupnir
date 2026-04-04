@@ -56,7 +56,10 @@ from draupnir.logic.transform.schema_build.assembled import (
     build_simplegroup,
     build_verdandi_field,
 )
-from draupnir.logic.transform.schema_build.composed import build_atom
+from draupnir.logic.transform.schema_build.composed import (
+    build_atom,
+    resolve_array_constraints,
+)
 from draupnir.logic.transform.schema_build.primitive import (
     build_enum,
     build_pattern,
@@ -175,6 +178,7 @@ def compile_subtree(
         "section": build_section,
         "shallowsection": build_shallowsection,
     }
+    array_levels = frozenset({"simplearray", "array", "superarray"})
     order = subtree_build_order(root_key, graph)
     context = BuildContext()
     defs: dict[str, BaseModel] = {}
@@ -182,6 +186,8 @@ def compile_subtree(
         level = graph.nodes[cache_key]["level"]
         model = graph.nodes[cache_key]["model"]
         result = dispatch[level](model, context)
+        if level in array_levels:
+            result = result.model_copy(update=resolve_array_constraints(model))
         context.full[cache_key] = result
         context.built[cache_key] = result
         if cache_key in shared:
@@ -278,10 +284,15 @@ def run_generate(
     graph = result
     schemas = export_all_schemas(graph)
     for cache_key, document in schemas.items():
-        write_schema(document, output_dir / schema_filename(cache_key))
+        filename = schema_filename(cache_key)
+        write_schema(document, output_dir / filename)
+        sys.stdout.write(f"  wrote {filename}\n")
     fragments = export_fragments(graph)
     for name, document in fragments.items():
-        write_schema(document, output_dir / f"{name.replace('_', '-')}.schema.json")
+        filename = f"{name.replace('_', '-')}.schema.json"
+        write_schema(document, output_dir / filename)
+        sys.stdout.write(f"  wrote {filename}\n")
+    sys.stdout.write(f"\n{len(schemas)} schemas + {len(fragments)} fragments -> {output_dir}\n")
     return 0
 
 

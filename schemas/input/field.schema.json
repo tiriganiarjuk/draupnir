@@ -215,6 +215,18 @@
       "default": null,
       "title": "Min Length"
     },
+    "max_length": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Length"
+    },
     "description": {
       "title": "Description",
       "type": "string"

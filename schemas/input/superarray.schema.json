@@ -636,6 +636,42 @@
       ],
       "title": "Items"
     },
+    "min_items": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Min Items"
+    },
+    "max_items": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Items"
+    },
+    "unique_items": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Unique Items"
+    },
     "description": {
       "title": "Description",
       "type": "string"

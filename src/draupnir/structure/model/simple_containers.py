@@ -48,6 +48,7 @@ class VerdandiField(BaseModel):
     const: str | None = None
     default: str | int | bool | list[str] | None = None
     min_length: int | None = None
+    max_length: int | None = None
     description: str
     semantic: SemanticBlock | None = None
     constraint: tuple[ConstraintRule, ...] | None = None
@@ -65,6 +66,9 @@ class Simplearray(BaseModel):
 
     title: str
     items: FieldItemRef
+    min_items: int | None = None
+    max_items: int | None = None
+    unique_items: bool | None = None
     description: str
 
 

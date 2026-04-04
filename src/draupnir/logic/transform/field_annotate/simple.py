@@ -112,6 +112,39 @@ def extract_type_min_length(inner_schema: BaseModel) -> int | None:
     return None
 
 
+def extract_type_max_length(inner_schema: BaseModel) -> int | None:
+    """Extract max_length from a built inner schema, or None if not applicable.
+
+    Only SchemaField carries max_length (it maps to atom/element types).
+    """
+    if isinstance(inner_schema, SchemaField):
+        return inner_schema.max_length
+    return None
+
+
+def max_length_ceiling(type_max: int | None) -> int:
+    """Return type max_length as ceiling, or unlimited sentinel if unset.
+
+    When the type has no max_length, any field-level max is a valid
+    tightening — the sentinel ensures the comparison always passes.
+    """
+    return type_max if type_max is not None else 2**31
+
+
+def resolve_field_max_length(field_max: int | None, type_max: int | None) -> int | None:
+    """Return field override only when it lowers below the type's max_length.
+
+    The type's max_length is the ceiling constraint. A field can tighten it
+    (lower the maximum) but not raise it. Returns None when the field
+    doesn't tighten the constraint, meaning the type ceiling is sufficient.
+    """
+    if field_max is None:
+        return None
+    if field_max < max_length_ceiling(type_max):
+        return field_max
+    return None
+
+
 def default_override(
     default_value: str | int | bool | list[str] | None,
 ) -> dict[str, str | int | bool | list[str]]:
@@ -124,8 +157,12 @@ def field_overrides(
     field_const: str | None,
     meta: FieldMeta,
 ) -> dict[str, str | int]:
-    """Return SchemaField-specific overrides (min_length, const)."""
-    return conditional_entries(("min_length", meta.min_length), ("const", field_const))
+    """Return SchemaField-specific overrides (min_length, max_length, const)."""
+    return conditional_entries(
+        ("min_length", meta.min_length),
+        ("max_length", meta.max_length),
+        ("const", field_const),
+    )
 
 
 def extension_overrides(

@@ -1,0 +1,60 @@
+{
+  "title": "Element",
+  "type": "object",
+  "description": "Atom or Enum with a runtime format contract.",
+  "$defs": {
+    "Atom": {
+      "type": "string"
+    },
+    "AtomOrEnumRef": {
+      "type": "string"
+    },
+    "Enum": {
+      "type": "string"
+    },
+    "PatternRef": {
+      "type": "string"
+    }
+  },
+  "properties": {
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "inherits": {
+      "$ref": "#/$defs/AtomOrEnumRef"
+    },
+    "format": {
+      "title": "Format",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "required": {
+      "title": "Required",
+      "anyOf": [
+        {
+          "type": "string",
+          "const": "mandatory"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "description": {
+      "title": "Description",
+      "type": "string"
+    }
+  },
+  "required": [
+    "title",
+    "inherits",
+    "description"
+  ]
+}

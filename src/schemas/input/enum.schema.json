@@ -1,0 +1,37 @@
+{
+  "title": "Enum",
+  "type": "object",
+  "description": "Enumerated allowed values.",
+  "properties": {
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "values": {
+      "title": "Values",
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "boolean"
+          }
+        ]
+      }
+    },
+    "description": {
+      "title": "Description",
+      "type": "string"
+    }
+  },
+  "required": [
+    "title",
+    "values",
+    "description"
+  ]
+}

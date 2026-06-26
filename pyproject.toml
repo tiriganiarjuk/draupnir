@@ -11,6 +11,8 @@ dependencies = [
 
 [project.scripts]
 draupnir = "draupnir.cli:main"
+draupnir-generate-models = "draupnir.cli:generate_models_main"
+draupnir-export-schemas = "draupnir.cli:export_schemas_main"
 
 [dependency-groups]
 dev = [

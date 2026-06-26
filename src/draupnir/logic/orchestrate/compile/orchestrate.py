@@ -47,30 +47,10 @@ from draupnir.logic.pure.cross_section.simple import (
 from draupnir.logic.pure.graph_build.composed import build_graph, subtree_build_order
 from draupnir.logic.pure.graph_build.primitive import cache_key_to_defs_key
 from draupnir.logic.pure.graph_build.simple import schema_shared_keys
+from draupnir.logic.orchestrate.compile.dispatch import BUILDER_DISPATCH
 from draupnir.logic.transform.schema_assembly.assembled import assemble_schema
 from draupnir.logic.transform.schema_assembly.composed import assemble_fragment
-from draupnir.logic.transform.schema_build.assembled import (
-    build_group,
-    build_section,
-    build_shallowsection,
-    build_simplegroup,
-    build_verdandi_field,
-)
-from draupnir.logic.transform.schema_build.composed import (
-    build_atom,
-    resolve_array_constraints,
-)
-from draupnir.logic.transform.schema_build.primitive import (
-    build_enum,
-    build_pattern,
-    build_simplearray,
-)
-from draupnir.logic.transform.schema_build.simple import (
-    build_array,
-    build_element,
-    build_tuple,
-    build_union,
-)
+from draupnir.logic.transform.schema_build.composed import resolve_array_constraints
 from draupnir.structure.config.build_context import BuildContext
 from draupnir.structure.config.fragments import Fragment
 from draupnir.structure.config.pipeline import PipelineArgs, PipelineContext, PipelineMode
@@ -162,22 +142,6 @@ def compile_subtree(
     functions that need actual field values (e.g., element inheriting
     atom's pattern, field metadata needing inner type's description).
     """
-    dispatch = {
-        "pattern": build_pattern,
-        "enum": build_enum,
-        "atom": build_atom,
-        "element": build_element,
-        "tuple": build_tuple,
-        "union": build_union,
-        "field": build_verdandi_field,
-        "simplearray": build_simplearray,
-        "simplegroup": build_simplegroup,
-        "array": build_array,
-        "group": build_group,
-        "superarray": build_array,
-        "section": build_section,
-        "shallowsection": build_shallowsection,
-    }
     array_levels = frozenset({"simplearray", "array", "superarray"})
     order = subtree_build_order(root_key, graph)
     context = BuildContext()
@@ -185,7 +149,7 @@ def compile_subtree(
     for cache_key in order:
         level = graph.nodes[cache_key]["level"]
         model = graph.nodes[cache_key]["model"]
-        result = dispatch[level](model, context)
+        result = BUILDER_DISPATCH[level](model, context)
         if level in array_levels:
             result = result.model_copy(update=resolve_array_constraints(model))
         context.full[cache_key] = result
@@ -421,22 +385,24 @@ def resolve_context(args: PipelineArgs) -> PipelineContext | str:
     )
 
 
-def run_pipeline(args: PipelineArgs) -> int:
-    """Top-level pipeline entry: resolve context then dispatch to mode handler.
+def dispatch_mode(mode: PipelineMode, verdandi: Path, output: Path) -> int:
+    """Route a resolved pipeline mode to its handler function."""
+    match mode:
+        case PipelineMode.generate:
+            return run_generate(verdandi, output)
+        case PipelineMode.check:
+            return run_check(verdandi, output)
+        case PipelineMode.list_schemas:
+            return run_list(verdandi, output)
+        case PipelineMode.fragments:
+            return run_fragments(verdandi, output)
 
-    The mode_dispatch dict maps PipelineMode enum values to the run_*
-    functions. All mode handlers share the same (verdandi, output) → int
-    signature for uniform dispatching.
-    """
+
+def run_pipeline(args: PipelineArgs) -> int:
+    """Top-level pipeline entry: resolve context then dispatch to mode handler."""
     context = resolve_context(args)
     if isinstance(context, str):
         sys.stderr.write(context + "\n")
         return 1
     verdandi, output = context_to_paths(context)
-    mode_dispatch = {
-        PipelineMode.generate: run_generate,
-        PipelineMode.check: run_check,
-        PipelineMode.list_schemas: run_list,
-        PipelineMode.fragments: run_fragments,
-    }
-    return mode_dispatch[context.mode](verdandi, output)
+    return dispatch_mode(context.mode, verdandi, output)

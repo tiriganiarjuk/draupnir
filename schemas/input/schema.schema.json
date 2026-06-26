@@ -1,19 +1,25 @@
 {
+  "title": "Schema",
+  "type": "object",
+  "description": "Root schema — references sections or shallowsections via zones.",
   "$defs": {
     "Array": {
       "type": "string"
     },
     "ArrayOneOf": {
-      "description": "OneOf composition for array items \u2014 multiple simplegroup options.",
+      "title": "ArrayOneOf",
+      "type": "object",
+      "description": "OneOf composition for array items — multiple simplegroup options.",
       "properties": {
         "oneOf": {
+          "title": "Oneof",
+          "type": "array",
           "items": {
             "$ref": "#/$defs/SimplegroupRef"
-          },
-          "title": "Oneof",
-          "type": "array"
+          }
         },
         "description": {
+          "title": "Description",
           "anyOf": [
             {
               "type": "string"
@@ -22,15 +28,12 @@
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Description"
+          "default": null
         }
       },
       "required": [
         "oneOf"
-      ],
-      "title": "ArrayOneOf",
-      "type": "object"
+      ]
     },
     "Atom": {
       "type": "string"
@@ -42,6 +45,8 @@
       "type": "string"
     },
     "ConditionalWhen": {
+      "title": "ConditionalWhen",
+      "type": "object",
       "description": "Predicate controlling conditional field presence.",
       "properties": {
         "field": {
@@ -49,6 +54,7 @@
           "type": "string"
         },
         "equals": {
+          "title": "Equals",
           "anyOf": [
             {
               "type": "string"
@@ -63,12 +69,13 @@
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Equals"
+          "default": null
         },
         "in": {
+          "title": "In",
           "anyOf": [
             {
+              "type": "array",
               "items": {
                 "anyOf": [
                   {
@@ -81,15 +88,13 @@
                     "type": "boolean"
                   }
                 ]
-              },
-              "type": "array"
+              }
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "In"
+          "default": null
         },
         "exists": {
           "const": true
@@ -98,8 +103,6 @@
       "required": [
         "field"
       ],
-      "title": "ConditionalWhen",
-      "type": "object",
       "oneOf": [
         {
           "required": [
@@ -119,6 +122,8 @@
       ]
     },
     "ConstraintRule": {
+      "title": "ConstraintRule",
+      "type": "object",
       "description": "Cross-field validation rule carried by a field.",
       "properties": {
         "rule": {
@@ -134,6 +139,7 @@
           "type": "string"
         },
         "field": {
+          "title": "Field",
           "anyOf": [
             {
               "type": "string"
@@ -142,10 +148,10 @@
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Field"
+          "default": null
         },
         "order": {
+          "title": "Order",
           "anyOf": [
             {
               "type": "string"
@@ -154,32 +160,29 @@
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Order"
+          "default": null
         },
         "in": {
+          "title": "In",
           "anyOf": [
             {
+              "type": "array",
               "items": {
                 "type": "string"
-              },
-              "type": "array"
+              }
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "In"
+          "default": null
         }
       },
       "required": [
         "rule",
         "severity",
         "reason"
-      ],
-      "title": "ConstraintRule",
-      "type": "object"
+      ]
     },
     "Element": {
       "type": "string"
@@ -200,6 +203,8 @@
       "type": "string"
     },
     "GroupContainerConditionalEntry": {
+      "title": "GroupContainerConditionalEntry",
+      "type": "object",
       "description": "Conditional container entry for group container zones.",
       "properties": {
         "ref": {
@@ -242,8 +247,6 @@
       "required": [
         "ref"
       ],
-      "title": "GroupContainerConditionalEntry",
-      "type": "object",
       "oneOf": [
         {
           "required": [
@@ -266,58 +269,60 @@
       "type": "string"
     },
     "GroupContainers": {
-      "description": "Container zones for a group \u2014 required, optional, conditional.",
+      "title": "GroupContainers",
+      "type": "object",
+      "description": "Container zones for a group — required, optional, conditional.",
       "properties": {
         "required": {
+          "title": "Required",
           "anyOf": [
             {
+              "type": "object",
               "additionalProperties": {
                 "$ref": "#/$defs/GroupContainerRef"
-              },
-              "type": "object"
+              }
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Required"
+          "default": null
         },
         "optional": {
+          "title": "Optional",
           "anyOf": [
             {
+              "type": "object",
               "additionalProperties": {
                 "$ref": "#/$defs/GroupContainerRef"
-              },
-              "type": "object"
+              }
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Optional"
+          "default": null
         },
         "conditional": {
+          "title": "Conditional",
           "anyOf": [
             {
+              "type": "object",
               "additionalProperties": {
                 "$ref": "#/$defs/GroupContainerConditionalEntry"
-              },
-              "type": "object"
+              }
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Conditional"
+          "default": null
         }
-      },
-      "title": "GroupContainers",
-      "type": "object"
+      }
     },
     "GroupFieldConditionalEntry": {
+      "title": "GroupFieldConditionalEntry",
+      "type": "object",
       "description": "Conditional field entry for group field zones.",
       "properties": {
         "ref": {
@@ -360,8 +365,6 @@
       "required": [
         "ref"
       ],
-      "title": "GroupFieldConditionalEntry",
-      "type": "object",
       "oneOf": [
         {
           "required": [
@@ -384,56 +387,56 @@
       "type": "string"
     },
     "GroupFields": {
-      "description": "Field zones for a group \u2014 required, optional, conditional.",
+      "title": "GroupFields",
+      "type": "object",
+      "description": "Field zones for a group — required, optional, conditional.",
       "properties": {
         "required": {
+          "title": "Required",
           "anyOf": [
             {
+              "type": "object",
               "additionalProperties": {
                 "$ref": "#/$defs/FieldItemRef"
-              },
-              "type": "object"
+              }
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Required"
+          "default": null
         },
         "optional": {
+          "title": "Optional",
           "anyOf": [
             {
+              "type": "object",
               "additionalProperties": {
                 "$ref": "#/$defs/FieldItemRef"
-              },
-              "type": "object"
+              }
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Optional"
+          "default": null
         },
         "conditional": {
+          "title": "Conditional",
           "anyOf": [
             {
+              "type": "object",
               "additionalProperties": {
                 "$ref": "#/$defs/GroupFieldConditionalEntry"
-              },
-              "type": "object"
+              }
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Conditional"
+          "default": null
         }
-      },
-      "title": "GroupFields",
-      "type": "object"
+      }
     },
     "GroupOrSimplegroupRef": {
       "type": "string"
@@ -445,6 +448,8 @@
       "type": "string"
     },
     "SchemaSectionConditionalEntry": {
+      "title": "SchemaSectionConditionalEntry",
+      "type": "object",
       "description": "Conditional section entry for schema section zones.",
       "properties": {
         "ref": {
@@ -487,8 +492,6 @@
       "required": [
         "ref"
       ],
-      "title": "SchemaSectionConditionalEntry",
-      "type": "object",
       "oneOf": [
         {
           "required": [
@@ -508,58 +511,60 @@
       ]
     },
     "SchemaSections": {
+      "title": "SchemaSections",
+      "type": "object",
       "description": "Zone container for schema sections: key.",
       "properties": {
         "required": {
+          "title": "Required",
           "anyOf": [
             {
+              "type": "object",
               "additionalProperties": {
                 "$ref": "#/$defs/SectionOnlyRef"
-              },
-              "type": "object"
+              }
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Required"
+          "default": null
         },
         "optional": {
+          "title": "Optional",
           "anyOf": [
             {
+              "type": "object",
               "additionalProperties": {
                 "$ref": "#/$defs/SectionOnlyRef"
-              },
-              "type": "object"
+              }
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Optional"
+          "default": null
         },
         "conditional": {
+          "title": "Conditional",
           "anyOf": [
             {
+              "type": "object",
               "additionalProperties": {
                 "$ref": "#/$defs/SchemaSectionConditionalEntry"
-              },
-              "type": "object"
+              }
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Conditional"
+          "default": null
         }
-      },
-      "title": "SchemaSections",
-      "type": "object"
+      }
     },
     "SchemaShallowConditionalEntry": {
+      "title": "SchemaShallowConditionalEntry",
+      "type": "object",
       "description": "Conditional shallowsection entry for schema shallowsection zones.",
       "properties": {
         "ref": {
@@ -602,8 +607,6 @@
       "required": [
         "ref"
       ],
-      "title": "SchemaShallowConditionalEntry",
-      "type": "object",
       "oneOf": [
         {
           "required": [
@@ -623,58 +626,60 @@
       ]
     },
     "SchemaShallowsections": {
+      "title": "SchemaShallowsections",
+      "type": "object",
       "description": "Zone container for schema shallowsections: key.",
       "properties": {
         "required": {
+          "title": "Required",
           "anyOf": [
             {
+              "type": "object",
               "additionalProperties": {
                 "$ref": "#/$defs/ShallowsectionOnlyRef"
-              },
-              "type": "object"
+              }
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Required"
+          "default": null
         },
         "optional": {
+          "title": "Optional",
           "anyOf": [
             {
+              "type": "object",
               "additionalProperties": {
                 "$ref": "#/$defs/ShallowsectionOnlyRef"
-              },
-              "type": "object"
+              }
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Optional"
+          "default": null
         },
         "conditional": {
+          "title": "Conditional",
           "anyOf": [
             {
+              "type": "object",
               "additionalProperties": {
                 "$ref": "#/$defs/SchemaShallowConditionalEntry"
-              },
-              "type": "object"
+              }
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Conditional"
+          "default": null
         }
-      },
-      "title": "SchemaShallowsections",
-      "type": "object"
+      }
     },
     "SectionContainerConditionalEntry": {
+      "title": "SectionContainerConditionalEntry",
+      "type": "object",
       "description": "Conditional container entry for section container zones.",
       "properties": {
         "ref": {
@@ -717,8 +722,6 @@
       "required": [
         "ref"
       ],
-      "title": "SectionContainerConditionalEntry",
-      "type": "object",
       "oneOf": [
         {
           "required": [
@@ -738,64 +741,67 @@
       ]
     },
     "SectionContainers": {
-      "description": "Container zones for a section \u2014 required/optional/conditional.",
+      "title": "SectionContainers",
+      "type": "object",
+      "description": "Container zones for a section — required/optional/conditional.",
       "properties": {
         "required": {
+          "title": "Required",
           "anyOf": [
             {
+              "type": "object",
               "additionalProperties": {
                 "$ref": "#/$defs/ComplexContainerRef"
-              },
-              "type": "object"
+              }
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Required"
+          "default": null
         },
         "optional": {
+          "title": "Optional",
           "anyOf": [
             {
+              "type": "object",
               "additionalProperties": {
                 "$ref": "#/$defs/ComplexContainerRef"
-              },
-              "type": "object"
+              }
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Optional"
+          "default": null
         },
         "conditional": {
+          "title": "Conditional",
           "anyOf": [
             {
+              "type": "object",
               "additionalProperties": {
                 "$ref": "#/$defs/SectionContainerConditionalEntry"
-              },
-              "type": "object"
+              }
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Conditional"
+          "default": null
         }
-      },
-      "title": "SectionContainers",
-      "type": "object"
+      }
     },
     "SectionOnlyRef": {
       "type": "string"
     },
     "SemanticBlock": {
+      "title": "SemanticBlock",
+      "type": "object",
       "description": "Semantic intent and validation guidance for a field.",
       "properties": {
         "intent": {
+          "title": "Intent",
           "anyOf": [
             {
               "type": "string"
@@ -804,40 +810,40 @@
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Intent"
+          "default": null
         },
         "checks": {
+          "title": "Checks",
           "anyOf": [
             {
+              "type": "array",
               "items": {
                 "type": "string"
-              },
-              "type": "array"
+              }
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Checks"
+          "default": null
         },
         "anti_patterns": {
+          "title": "Anti Patterns",
           "anyOf": [
             {
+              "type": "array",
               "items": {
                 "type": "string"
-              },
-              "type": "array"
+              }
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Anti Patterns"
+          "default": null
         },
         "severity": {
+          "title": "Severity",
           "anyOf": [
             {
               "type": "string"
@@ -846,14 +852,13 @@
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Severity"
+          "default": null
         }
-      },
-      "title": "SemanticBlock",
-      "type": "object"
+      }
     },
     "ShallowContainerConditionalEntry": {
+      "title": "ShallowContainerConditionalEntry",
+      "type": "object",
       "description": "Conditional container entry for shallowsection container zones.",
       "properties": {
         "ref": {
@@ -896,8 +901,6 @@
       "required": [
         "ref"
       ],
-      "title": "ShallowContainerConditionalEntry",
-      "type": "object",
       "oneOf": [
         {
           "required": [
@@ -920,58 +923,60 @@
       "type": "string"
     },
     "ShallowContainers": {
-      "description": "Container zones for a shallowsection \u2014 max 3 total containers.",
+      "title": "ShallowContainers",
+      "type": "object",
+      "description": "Container zones for a shallowsection — max 3 total containers.",
       "properties": {
         "required": {
+          "title": "Required",
           "anyOf": [
             {
+              "type": "object",
               "additionalProperties": {
                 "$ref": "#/$defs/ShallowContainerRef"
-              },
-              "type": "object"
+              }
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Required"
+          "default": null
         },
         "optional": {
+          "title": "Optional",
           "anyOf": [
             {
+              "type": "object",
               "additionalProperties": {
                 "$ref": "#/$defs/ShallowContainerRef"
-              },
-              "type": "object"
+              }
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Optional"
+          "default": null
         },
         "conditional": {
+          "title": "Conditional",
           "anyOf": [
             {
+              "type": "object",
               "additionalProperties": {
                 "$ref": "#/$defs/ShallowContainerConditionalEntry"
-              },
-              "type": "object"
+              }
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Conditional"
+          "default": null
         }
-      },
-      "title": "ShallowContainers",
-      "type": "object"
+      }
     },
     "ShallowFieldConditionalEntry": {
+      "title": "ShallowFieldConditionalEntry",
+      "type": "object",
       "description": "Conditional field entry for shallowsection field zones.",
       "properties": {
         "ref": {
@@ -1014,8 +1019,6 @@
       "required": [
         "ref"
       ],
-      "title": "ShallowFieldConditionalEntry",
-      "type": "object",
       "oneOf": [
         {
           "required": [
@@ -1038,56 +1041,56 @@
       "type": "string"
     },
     "ShallowsectionFields": {
-      "description": "Field zones for a shallowsection \u2014 required, optional, conditional.",
+      "title": "ShallowsectionFields",
+      "type": "object",
+      "description": "Field zones for a shallowsection — required, optional, conditional.",
       "properties": {
         "required": {
+          "title": "Required",
           "anyOf": [
             {
+              "type": "object",
               "additionalProperties": {
                 "$ref": "#/$defs/FieldItemRef"
-              },
-              "type": "object"
+              }
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Required"
+          "default": null
         },
         "optional": {
+          "title": "Optional",
           "anyOf": [
             {
+              "type": "object",
               "additionalProperties": {
                 "$ref": "#/$defs/FieldItemRef"
-              },
-              "type": "object"
+              }
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Optional"
+          "default": null
         },
         "conditional": {
+          "title": "Conditional",
           "anyOf": [
             {
+              "type": "object",
               "additionalProperties": {
                 "$ref": "#/$defs/ShallowFieldConditionalEntry"
-              },
-              "type": "object"
+              }
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Conditional"
+          "default": null
         }
-      },
-      "title": "ShallowsectionFields",
-      "type": "object"
+      }
     },
     "ShallowsectionOnlyRef": {
       "type": "string"
@@ -1099,6 +1102,8 @@
       "type": "string"
     },
     "SimplegroupConditionalEntry": {
+      "title": "SimplegroupConditionalEntry",
+      "type": "object",
       "description": "Conditional field entry for simplegroup zones.",
       "properties": {
         "ref": {
@@ -1141,8 +1146,6 @@
       "required": [
         "ref"
       ],
-      "title": "SimplegroupConditionalEntry",
-      "type": "object",
       "oneOf": [
         {
           "required": [
@@ -1171,16 +1174,19 @@
       "type": "string"
     },
     "SuperarrayOneOf": {
-      "description": "OneOf composition for superarray items \u2014 group/simplegroup options.",
+      "title": "SuperarrayOneOf",
+      "type": "object",
+      "description": "OneOf composition for superarray items — group/simplegroup options.",
       "properties": {
         "oneOf": {
+          "title": "Oneof",
+          "type": "array",
           "items": {
             "$ref": "#/$defs/GroupOrSimplegroupRef"
-          },
-          "title": "Oneof",
-          "type": "array"
+          }
         },
         "description": {
+          "title": "Description",
           "anyOf": [
             {
               "type": "string"
@@ -1189,15 +1195,12 @@
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Description"
+          "default": null
         }
       },
       "required": [
         "oneOf"
-      ],
-      "title": "SuperarrayOneOf",
-      "type": "object"
+      ]
     },
     "Tuple_": {
       "type": "string"
@@ -1212,7 +1215,6 @@
       "type": "string"
     }
   },
-  "description": "Root schema \u2014 references sections or shallowsections via zones.",
   "properties": {
     "title": {
       "title": "Title",
@@ -1253,7 +1255,5 @@
     "title",
     "version",
     "description"
-  ],
-  "title": "Schema",
-  "type": "object"
+  ]
 }

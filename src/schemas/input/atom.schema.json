@@ -1,0 +1,80 @@
+{
+  "title": "Atom",
+  "type": "object",
+  "description": "Constrained base type: string, integer, or boolean.",
+  "$defs": {
+    "PatternRef": {
+      "type": "string"
+    }
+  },
+  "properties": {
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "type": {
+      "title": "Type",
+      "type": "string",
+      "enum": [
+        "string",
+        "integer",
+        "boolean"
+      ]
+    },
+    "pattern": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PatternRef"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "excludes": {
+      "title": "Excludes",
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PatternRef"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "min_length": {
+      "title": "Min Length",
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "max_length": {
+      "title": "Max Length",
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "description": {
+      "title": "Description",
+      "type": "string"
+    }
+  },
+  "required": [
+    "title",
+    "type",
+    "description"
+  ]
+}

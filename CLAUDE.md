@@ -360,6 +360,33 @@ when the project's architecture or documentation evolves.
 | `tools/inspect_schema.py` | Schema inspector — should work unchanged with new output |
 
 ---
+
+<!-- Salvaged memory residue routed into draupnir. Additive only. -->
+
+## You Will Get These Things Wrong (salvaged)
+
+### Generating conditional `if` blocks without a `required` guard
+**Detection:** If you build a JSON Schema `if/then/else` from `only_when`/`always_when`/`not_when` and the `if` block has `properties` but no `required`...
+**Why it's wrong:** When the predicate field is absent from the data, an `if` block that only constrains `properties` is vacuously true — the `then`/`else` fires (or fails to fire) incorrectly. The predicate field must be listed in the `if` block's `required` so the condition only matches when the field is actually present.
+**Recovery:** Add the predicate field name to the `if` block's `required` tuple for both same-section and cross-section conditional builders.
+
+## Recovery Sources (salvaged)
+
+### The input gate (file-validation boundary) — Rust internals
+The gate crate is `nornir/gates/gate_verdandi_input/`, built/deployed via `nornir_deploy --build gates`. Internally it does `fs::read_to_string(file_path)` → `yaml_to_json()` (from `format_core`) → validate against the JSON Schema → return the validated JSON string. Compiled schemas are held in a `Mutex<HashMap<String, Validator>>` cache. On failure it raises `ValueError` — it does NOT return a dict or an `{"ok": ...}` envelope. Python calls `Model.model_validate_json(json_string)` on the result; no `yaml.safe_load`, `json.loads`, or `file.read_text()` in Python.
+
+## Project Notes (salvaged)
+
+### Generated input models wrap refs in `RootModel[str]`, not bare `str`
+`datamodel-code-generator` emits ref fields as `RootModel[str]` subclasses (e.g. `PatternRef(RootModel[str])`, `SimplegroupItemRef(RootModel[str])`), not plain `str` fields. Access the actual string via `.root`. Zone dicts come through as `RootModel[dict[str, RefType] | None]` — unwrap `.root` to get the dict, whose values are themselves `RootModel[str]` instances. Any code that extracts refs to build the graph (or that reads zone properties) must unwrap RootModel at each layer: if `isinstance(model, RootModel)` unwrap `.root`, then branch on dict / list / str / BaseModel.
+
+### `export_input_schemas.py` self-reference bug
+When exporting input schemas, ref fields are rewritten to `{"type": "string"}` (refs are cache-key strings in YAML) and removed model validators are re-encoded as constraints (oneOf/anyOf/const). The model currently being exported must be EXCLUDED from this string-replacement pass — otherwise the schema replaces references to its own type and is corrupted (this bug was hit and fixed).
+
+### The builder dispatch table must live in `orchestrate`
+The compile loop's dispatch table maps each of the 14 levels to its builder, importing builders from all four lower levels (primitive, simple, composed, assembled). Only the orchestrate level may legally import across all those levels, so the dispatch table must stay in `orchestrate` (the compile loop) — it cannot be extracted into a lower-level `dispatch.py` without violating the zone/level import rules.
+
+---
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <!-- EVERYTHING ABOVE THIS LINE IS BEHAVIORAL (human-maintained, empirical) -->
 <!-- EVERYTHING BELOW THIS LINE IS DYNAMIC ORIENTATION (agent-regenerated)  -->

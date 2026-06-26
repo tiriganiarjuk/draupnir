@@ -1,4 +1,6 @@
 {
+  "title": "Enum",
+  "type": "object",
   "description": "Enumerated allowed values.",
   "properties": {
     "title": {
@@ -6,6 +8,8 @@
       "type": "string"
     },
     "values": {
+      "title": "Values",
+      "type": "array",
       "items": {
         "anyOf": [
           {
@@ -18,9 +22,7 @@
             "type": "boolean"
           }
         ]
-      },
-      "title": "Values",
-      "type": "array"
+      }
     },
     "description": {
       "title": "Description",
@@ -31,7 +33,5 @@
     "title",
     "values",
     "description"
-  ],
-  "title": "Enum",
-  "type": "object"
+  ]
 }

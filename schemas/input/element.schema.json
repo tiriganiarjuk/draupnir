@@ -1,4 +1,7 @@
 {
+  "title": "Element",
+  "type": "object",
+  "description": "Atom or Enum with a runtime format contract.",
   "$defs": {
     "Atom": {
       "type": "string"
@@ -13,7 +16,6 @@
       "type": "string"
     }
   },
-  "description": "Atom or Enum with a runtime format contract.",
   "properties": {
     "title": {
       "title": "Title",
@@ -23,6 +25,7 @@
       "$ref": "#/$defs/AtomOrEnumRef"
     },
     "format": {
+      "title": "Format",
       "anyOf": [
         {
           "type": "string"
@@ -31,21 +34,20 @@
           "type": "null"
         }
       ],
-      "default": null,
-      "title": "Format"
+      "default": null
     },
     "required": {
+      "title": "Required",
       "anyOf": [
         {
-          "const": "mandatory",
-          "type": "string"
+          "type": "string",
+          "const": "mandatory"
         },
         {
           "type": "null"
         }
       ],
-      "default": null,
-      "title": "Required"
+      "default": null
     },
     "description": {
       "title": "Description",
@@ -56,7 +58,5 @@
     "title",
     "inherits",
     "description"
-  ],
-  "title": "Element",
-  "type": "object"
+  ]
 }

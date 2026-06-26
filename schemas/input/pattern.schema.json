@@ -1,5 +1,7 @@
 {
-  "description": "Raw regex pattern \u2014 the lowest building block.",
+  "title": "Pattern",
+  "type": "object",
+  "description": "Raw regex pattern — the lowest building block.",
   "properties": {
     "title": {
       "title": "Title",
@@ -18,7 +20,5 @@
     "title",
     "regex",
     "description"
-  ],
-  "title": "Pattern",
-  "type": "object"
+  ]
 }

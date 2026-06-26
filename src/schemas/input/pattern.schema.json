@@ -1,0 +1,24 @@
+{
+  "title": "Pattern",
+  "type": "object",
+  "description": "Raw regex pattern — the lowest building block.",
+  "properties": {
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "regex": {
+      "title": "Regex",
+      "type": "string"
+    },
+    "description": {
+      "title": "Description",
+      "type": "string"
+    }
+  },
+  "required": [
+    "title",
+    "regex",
+    "description"
+  ]
+}

@@ -1,0 +1,360 @@
+{
+  "title": "Simplegroup",
+  "type": "object",
+  "description": "Flat object with field zones — no nested containers.",
+  "$defs": {
+    "Atom": {
+      "type": "string"
+    },
+    "AtomOrEnumRef": {
+      "type": "string"
+    },
+    "ConditionalWhen": {
+      "title": "ConditionalWhen",
+      "type": "object",
+      "description": "Predicate controlling conditional field presence.",
+      "properties": {
+        "field": {
+          "title": "Field",
+          "type": "string"
+        },
+        "equals": {
+          "title": "Equals",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "in": {
+          "title": "In",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "boolean"
+                  }
+                ]
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "exists": {
+          "const": true
+        }
+      },
+      "required": [
+        "field"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "equals"
+          ]
+        },
+        {
+          "required": [
+            "in"
+          ]
+        },
+        {
+          "required": [
+            "exists"
+          ]
+        }
+      ]
+    },
+    "ConstraintRule": {
+      "title": "ConstraintRule",
+      "type": "object",
+      "description": "Cross-field validation rule carried by a field.",
+      "properties": {
+        "rule": {
+          "title": "Rule",
+          "type": "string"
+        },
+        "severity": {
+          "title": "Severity",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "field": {
+          "title": "Field",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "order": {
+          "title": "Order",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "in": {
+          "title": "In",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "rule",
+        "severity",
+        "reason"
+      ]
+    },
+    "Element": {
+      "type": "string"
+    },
+    "Enum": {
+      "type": "string"
+    },
+    "FieldItemRef": {
+      "type": "string"
+    },
+    "FieldRef": {
+      "type": "string"
+    },
+    "FieldTypeRef": {
+      "type": "string"
+    },
+    "Pattern": {
+      "type": "string"
+    },
+    "PatternRef": {
+      "type": "string"
+    },
+    "SemanticBlock": {
+      "title": "SemanticBlock",
+      "type": "object",
+      "description": "Semantic intent and validation guidance for a field.",
+      "properties": {
+        "intent": {
+          "title": "Intent",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "checks": {
+          "title": "Checks",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "anti_patterns": {
+          "title": "Anti Patterns",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "severity": {
+          "title": "Severity",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "Simplearray": {
+      "type": "string"
+    },
+    "SimplegroupConditionalEntry": {
+      "title": "SimplegroupConditionalEntry",
+      "type": "object",
+      "description": "Conditional field entry for simplegroup zones.",
+      "properties": {
+        "ref": {
+          "$ref": "#/$defs/SimplegroupItemRef"
+        },
+        "only_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConditionalWhen"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "always_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConditionalWhen"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "not_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConditionalWhen"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "ref"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "only_when"
+          ]
+        },
+        {
+          "required": [
+            "always_when"
+          ]
+        },
+        {
+          "required": [
+            "not_when"
+          ]
+        }
+      ]
+    },
+    "SimplegroupItemRef": {
+      "type": "string"
+    },
+    "Tuple_": {
+      "type": "string"
+    },
+    "UnionMemberRef": {
+      "type": "string"
+    },
+    "Union_": {
+      "type": "string"
+    },
+    "VerdandiField": {
+      "type": "string"
+    }
+  },
+  "properties": {
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "description": {
+      "title": "Description",
+      "type": "string"
+    },
+    "required": {
+      "title": "Required",
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/SimplegroupItemRef"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "optional": {
+      "title": "Optional",
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/SimplegroupItemRef"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "conditional": {
+      "title": "Conditional",
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/SimplegroupConditionalEntry"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "title",
+    "description"
+  ]
+}

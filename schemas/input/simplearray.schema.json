@@ -1,4 +1,7 @@
 {
+  "title": "Simplearray",
+  "type": "object",
+  "description": "Variable-length array of a single field type.",
   "$defs": {
     "Atom": {
       "type": "string"
@@ -7,6 +10,8 @@
       "type": "string"
     },
     "ConstraintRule": {
+      "title": "ConstraintRule",
+      "type": "object",
       "description": "Cross-field validation rule carried by a field.",
       "properties": {
         "rule": {
@@ -22,6 +27,7 @@
           "type": "string"
         },
         "field": {
+          "title": "Field",
           "anyOf": [
             {
               "type": "string"
@@ -30,10 +36,10 @@
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Field"
+          "default": null
         },
         "order": {
+          "title": "Order",
           "anyOf": [
             {
               "type": "string"
@@ -42,32 +48,29 @@
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Order"
+          "default": null
         },
         "in": {
+          "title": "In",
           "anyOf": [
             {
+              "type": "array",
               "items": {
                 "type": "string"
-              },
-              "type": "array"
+              }
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "In"
+          "default": null
         }
       },
       "required": [
         "rule",
         "severity",
         "reason"
-      ],
-      "title": "ConstraintRule",
-      "type": "object"
+      ]
     },
     "Element": {
       "type": "string"
@@ -91,9 +94,12 @@
       "type": "string"
     },
     "SemanticBlock": {
+      "title": "SemanticBlock",
+      "type": "object",
       "description": "Semantic intent and validation guidance for a field.",
       "properties": {
         "intent": {
+          "title": "Intent",
           "anyOf": [
             {
               "type": "string"
@@ -102,40 +108,40 @@
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Intent"
+          "default": null
         },
         "checks": {
+          "title": "Checks",
           "anyOf": [
             {
+              "type": "array",
               "items": {
                 "type": "string"
-              },
-              "type": "array"
+              }
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Checks"
+          "default": null
         },
         "anti_patterns": {
+          "title": "Anti Patterns",
           "anyOf": [
             {
+              "type": "array",
               "items": {
                 "type": "string"
-              },
-              "type": "array"
+              }
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Anti Patterns"
+          "default": null
         },
         "severity": {
+          "title": "Severity",
           "anyOf": [
             {
               "type": "string"
@@ -144,12 +150,9 @@
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Severity"
+          "default": null
         }
-      },
-      "title": "SemanticBlock",
-      "type": "object"
+      }
     },
     "Tuple_": {
       "type": "string"
@@ -161,7 +164,6 @@
       "type": "string"
     }
   },
-  "description": "Variable-length array of a single field type.",
   "properties": {
     "title": {
       "title": "Title",
@@ -171,6 +173,7 @@
       "$ref": "#/$defs/FieldItemRef"
     },
     "min_items": {
+      "title": "Min Items",
       "anyOf": [
         {
           "type": "integer"
@@ -179,10 +182,10 @@
           "type": "null"
         }
       ],
-      "default": null,
-      "title": "Min Items"
+      "default": null
     },
     "max_items": {
+      "title": "Max Items",
       "anyOf": [
         {
           "type": "integer"
@@ -191,10 +194,10 @@
           "type": "null"
         }
       ],
-      "default": null,
-      "title": "Max Items"
+      "default": null
     },
     "unique_items": {
+      "title": "Unique Items",
       "anyOf": [
         {
           "type": "boolean"
@@ -203,8 +206,7 @@
           "type": "null"
         }
       ],
-      "default": null,
-      "title": "Unique Items"
+      "default": null
     },
     "description": {
       "title": "Description",
@@ -215,7 +217,5 @@
     "title",
     "items",
     "description"
-  ],
-  "title": "Simplearray",
-  "type": "object"
+  ]
 }

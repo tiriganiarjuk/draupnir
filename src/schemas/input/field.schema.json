@@ -1,0 +1,255 @@
+{
+  "title": "VerdandiField",
+  "type": "object",
+  "description": "Semantic membrane: type reference + description + extensions.",
+  "$defs": {
+    "Atom": {
+      "type": "string"
+    },
+    "AtomOrEnumRef": {
+      "type": "string"
+    },
+    "ConstraintRule": {
+      "title": "ConstraintRule",
+      "type": "object",
+      "description": "Cross-field validation rule carried by a field.",
+      "properties": {
+        "rule": {
+          "title": "Rule",
+          "type": "string"
+        },
+        "severity": {
+          "title": "Severity",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "field": {
+          "title": "Field",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "order": {
+          "title": "Order",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "in": {
+          "title": "In",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "rule",
+        "severity",
+        "reason"
+      ]
+    },
+    "Element": {
+      "type": "string"
+    },
+    "Enum": {
+      "type": "string"
+    },
+    "FieldRef": {
+      "type": "string"
+    },
+    "FieldTypeRef": {
+      "type": "string"
+    },
+    "Pattern": {
+      "type": "string"
+    },
+    "PatternRef": {
+      "type": "string"
+    },
+    "SemanticBlock": {
+      "title": "SemanticBlock",
+      "type": "object",
+      "description": "Semantic intent and validation guidance for a field.",
+      "properties": {
+        "intent": {
+          "title": "Intent",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "checks": {
+          "title": "Checks",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "anti_patterns": {
+          "title": "Anti Patterns",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "severity": {
+          "title": "Severity",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "Tuple_": {
+      "type": "string"
+    },
+    "UnionMemberRef": {
+      "type": "string"
+    },
+    "Union_": {
+      "type": "string"
+    }
+  },
+  "properties": {
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "type": {
+      "$ref": "#/$defs/FieldTypeRef"
+    },
+    "const": {
+      "title": "Const",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "default": {
+      "title": "Default",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "min_length": {
+      "title": "Min Length",
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "max_length": {
+      "title": "Max Length",
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "description": {
+      "title": "Description",
+      "type": "string"
+    },
+    "semantic": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SemanticBlock"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "constraint": {
+      "title": "Constraint",
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConstraintRule"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "title",
+    "type",
+    "description"
+  ]
+}

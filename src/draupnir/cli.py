@@ -48,5 +48,19 @@ def run(
 
 
 def main() -> None:
-    """Entry point for pyproject.toml."""
+    """Entry point for pyproject.toml — draupnir."""
     app()
+
+
+def generate_models_main() -> None:
+    """Entry point for pyproject.toml — draupnir-generate-models."""
+    from draupnir.logic.orchestrate.codegen_models.orchestrate import run_codegen
+
+    raise SystemExit(run_codegen())
+
+
+def export_schemas_main() -> None:
+    """Entry point for pyproject.toml — draupnir-export-schemas."""
+    from draupnir.logic.orchestrate.codegen_schemas.orchestrate import run_export
+
+    raise SystemExit(run_export())

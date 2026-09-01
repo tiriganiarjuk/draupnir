@@ -36,7 +36,7 @@ The entire compilation is a linear walk over the topologically sorted graph. Zer
 ## Usage
 
 ```bash
-uv run draupnir --all                  # Generate all schemas
+uv run draupnir                  # Generate all schemas
 uv run draupnir --project <name>       # Generate schemas for a single project
 ```
 

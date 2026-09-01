@@ -164,7 +164,7 @@ This will be a long coding session with frequent compaction. After each compacti
 
 ### After Schema Regeneration
 
-When draupnir regenerates schemas (`uv run draupnir --all`), nornir must be redeployed to embed the updated schemas:
+When draupnir regenerates schemas (`uv run draupnir`), nornir must be redeployed to embed the updated schemas:
 
 ```bash
 cd /Users/johnny/.ai/spaces/bragi/tools/nornir && ./deploy_gates.py

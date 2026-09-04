@@ -7,7 +7,7 @@ CC=2-3 helpers. Handle the three ways paths can be specified:
 
 find_workspace_root walks up the directory tree looking for a parent
 that contains a verdandi/ subdirectory — this is the convention for
-the .ai workspace structure where draupnir and verdandi are siblings.
+the ai workspace structure where draupnir and verdandi are siblings.
 """
 
 from pathlib import Path
@@ -40,8 +40,8 @@ def context_to_paths(context: PipelineContext) -> tuple[Path, Path]:
 def find_workspace_root(start: Path) -> Path | None:
     """Find the workspace root by walking up from a starting path.
 
-    The .ai workspace convention places draupnir and verdandi as siblings
-    under a common root (e.g., ~/.ai/smidja/). Walks up from start
+    The ai workspace convention places draupnir and verdandi as siblings
+    under a common root (e.g., ~/ai/smidja/). Walks up from start
     looking for an ancestor that contains a verdandi/ subdirectory.
     Returns None if not found — caller must then require explicit paths.
     """

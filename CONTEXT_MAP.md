@@ -1,6 +1,6 @@
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <!-- DO NOT EDIT THIS BLOCK. Before editing ANY part of this file, you MUST  -->
-<!-- first read /Users/johnny/.ai/CONTEXT_MANAGEMENT_SYSTEM.md — it defines  -->
+<!-- first read /Users/johnny/ai/CONTEXT_MANAGEMENT_SYSTEM.md — it defines  -->
 <!-- what this file is for and what may NOT go in it.                        -->
 <!--                                                                          -->
 <!-- This file is a MAP (a router), not a source. Its only job is to tell    -->
@@ -29,9 +29,9 @@ The schema compiler: it turns the Verdandi YAML hierarchy into JSON Schema docum
 
 ## Orientation gate — read these, in this order, to be oriented
 
-1. `~/.ai/smidja/galdr/context/AGENT_BUILD_SYSTEM.md` — why the pipeline exists at all: determinism as the goal, the double gate, and the difference between build-time and run-time flows. Reading the five-part chain as one runtime pipeline is a common and costly mistake this document exists to prevent.
-2. `~/.ai/smidja/galdr/context/DRAUPNIR_ELEMENT.md` — Draupnir's own reason for being: why compilation is a graph walk with zero recursion, what the self-hosting loop closes, why fragments exist, and the one gap that is load-bearing.
-3. `~/.ai/smidja/galdr/context/VERDANDI_ELEMENT.md` — the input. You cannot reason about the compiler without knowing what the hierarchy is for and why an LLM must not author a schema directly.
+1. `~/ai/smidja/galdr/context/AGENT_BUILD_SYSTEM.md` — why the pipeline exists at all: determinism as the goal, the double gate, and the difference between build-time and run-time flows. Reading the five-part chain as one runtime pipeline is a common and costly mistake this document exists to prevent.
+2. `~/ai/smidja/galdr/context/DRAUPNIR_ELEMENT.md` — Draupnir's own reason for being: why compilation is a graph walk with zero recursion, what the self-hosting loop closes, why fragments exist, and the one gap that is load-bearing.
+3. `~/ai/smidja/galdr/context/VERDANDI_ELEMENT.md` — the input. You cannot reason about the compiler without knowing what the hierarchy is for and why an LLM must not author a schema directly.
 
 > The next four are read by you, personally, in this context — never delegated to a
 > subagent, never absorbed via a summary.
@@ -53,9 +53,9 @@ The schema compiler: it turns the Verdandi YAML hierarchy into JSON Schema docum
 | where a function goes / what zone / what level | `THE_LEVEL_SYSTEM.md` |
 | how external data becomes typed / a shape has no model | `HOW_DATA_ENTERS.md` |
 | how to run it / what the flags are | `src/draupnir/cli.py` — the CLI is the truth. There is no `--all`; bare `uv run draupnir` is generate-everything |
-| what the input hierarchy allows | `~/.ai/smidja/verdandi/COMPOSITION_RULES.md` |
+| what the input hierarchy allows | `~/ai/smidja/verdandi/COMPOSITION_RULES.md` |
 | what the output is embedded into | `context/NORNIR_GATES_ELEMENT.md` |
-| what a generated schema looks like | `~/.ai/smidja/verdandi/{project}/output/*.schema.json` |
+| what a generated schema looks like | `~/ai/smidja/verdandi/{project}/output/*.schema.json` |
 | whether a generated schema drifted | `uv run draupnir --check` — compiles in memory, reports without writing |
 | the full forward cascade after an edit | `context/AGENT_BUILD_SYSTEM.md` § The forward cascade |
 | current state / what's left to build | read live — the code and `git log`. Nothing is stored |

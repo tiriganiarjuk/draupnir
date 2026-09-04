@@ -88,7 +88,7 @@ This will be a long coding session with frequent compaction. After each compacti
 When draupnir regenerates schemas (`uv run draupnir`), nornir must be redeployed to embed the updated schemas:
 
 ```bash
-cd /Users/johnny/.ai/spaces/bragi/tools/nornir && ./deploy_gates.py
+cd /Users/johnny/ai/spaces/bragi/tools/nornir && ./deploy_gates.py
 ```
 
 Do NOT use bare `cargo build` — it skips gate module deployment (maturin builds, `.so` extraction, symlink creation, verification).

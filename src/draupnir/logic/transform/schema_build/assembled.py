@@ -13,7 +13,7 @@ annotates the inline schema or builds a SchemaRef with sibling metadata
 depending on whether the inner type was promoted to $defs.
 """
 
-from pydantic import BaseModel, RootModel
+from pydantic import BaseModel
 
 from draupnir.logic.transform.field_annotate.composed import (
     apply_inline_metadata,

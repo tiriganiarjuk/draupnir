@@ -18,9 +18,11 @@ from draupnir.logic.pure.graph_build.simple import (
     edge_ref_to_attrs,
     has_zone_fields,
     is_cache_ref,
+    sibling_entry_names,
 )
 from draupnir.logic.pure.unwrap.simple import (
     unwrap_ref_value,
+    unwrap_when_field,
     unwrap_zone_dict,
 )
 from draupnir.structure.config.edge_ref import EdgeRef
@@ -177,6 +179,22 @@ def extract_model_refs(
         if ref_target in cache_keys and ref_target not in zone_targets:
             refs.append(EdgeRef(target=ref_target, zone="direct", name=""))
     return refs
+
+
+def node_predicate_violations(graph: nx.DiGraph, node: str) -> list[str]:
+    """Report predicate targets on one container that name no sibling."""
+    names = sibling_entry_names(graph, node)
+    violations: list[str] = []
+    for _, _, data in graph.out_edges(node, data=True):
+        for mode in ("only_when", "always_when", "not_when"):
+            target = unwrap_when_field(data.get(mode))
+            if target is None or target.startswith(".") or target in names:
+                continue
+            violations.append(
+                f"{node}: {data['name']}.{mode} targets '{target}', "
+                f"which is not a field of this container",
+            )
+    return violations
 
 
 def subtree_build_order(root_key: str, graph: nx.DiGraph) -> list[str]:

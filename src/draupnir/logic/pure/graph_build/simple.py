@@ -60,6 +60,20 @@ def edge_ref_to_attrs(edge_ref: EdgeRef) -> dict[str, str | BaseModel]:
     return attrs
 
 
+def sibling_entry_names(graph: nx.DiGraph, node: str) -> set[str]:
+    """Collect every zone entry name declared on one container.
+
+    A conditional predicate names a sibling by its key, so the outgoing edge
+    names of a node are exactly the set of names a predicate on that node may
+    legally target.
+    """
+    return {
+        data["name"]
+        for _, _, data in graph.out_edges(node, data=True)
+        if data.get("name")
+    }
+
+
 def schema_shared_keys(schema_key: str, graph: nx.DiGraph) -> frozenset[str]:
     """Compute per-schema $defs candidates via induced subgraph in-degree.
 

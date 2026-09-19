@@ -26,7 +26,7 @@ def unwrap_zone_dict(wrapper: RootModel | None) -> dict[str, BaseModel] | None:
     return wrapper.root if isinstance(wrapper.root, dict) else None
 
 
-def unwrap_ref_value(wrapper: RootModel | BaseModel | str) -> str | None:
+def unwrap_ref_value(wrapper: RootModel | BaseModel | str | None) -> str | None:
     """Access .root on a ref RootModel to get the cache key string.
 
     Generated ref fields are RootModel[str] — .root is the cache key
@@ -35,6 +35,18 @@ def unwrap_ref_value(wrapper: RootModel | BaseModel | str) -> str | None:
     """
     ref_value = wrapper.root if isinstance(wrapper, RootModel) else wrapper
     return ref_value if isinstance(ref_value, str) else None
+
+
+def unwrap_when_field(when_wrapper: RootModel | BaseModel | None) -> str | None:
+    """Peel a raw edge when-condition down to the field name it names.
+
+    Graph edges carry when-conditions in generated form — RootModel wrapping
+    an inner model whose .field is itself RootModel[str]. This takes both
+    layers off and returns the bare name, or None when there is no condition
+    or the shape is not what we expect.
+    """
+    inner = when_wrapper.root if isinstance(when_wrapper, RootModel) else when_wrapper
+    return unwrap_ref_value(getattr(inner, "field", None))
 
 
 def unwrap_when_equals(when_inner: BaseModel) -> str | int | bool | None:

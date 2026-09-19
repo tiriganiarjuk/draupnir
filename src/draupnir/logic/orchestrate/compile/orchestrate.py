@@ -44,7 +44,11 @@ from draupnir.logic.pure.cross_section.simple import (
     build_root_conditional,
     resolve_cross_section_mode,
 )
-from draupnir.logic.pure.graph_build.composed import build_graph, subtree_build_order
+from draupnir.logic.pure.graph_build.composed import (
+    build_graph,
+    node_predicate_violations,
+    subtree_build_order,
+)
 from draupnir.logic.pure.graph_build.primitive import cache_key_to_defs_key
 from draupnir.logic.pure.graph_build.simple import schema_shared_keys
 from draupnir.logic.orchestrate.compile.dispatch import BUILDER_DISPATCH
@@ -228,7 +232,15 @@ def load_and_build_graph(
     errors = load_all_levels(verdandi_root, cache)
     if errors:
         return "\n".join(errors)
-    return build_graph(cache)
+    graph = build_graph(cache)
+    violations = [
+        violation
+        for node in graph.nodes
+        for violation in node_predicate_violations(graph, node)
+    ]
+    if violations:
+        return "\n".join(violations)
+    return graph
 
 
 def run_generate(

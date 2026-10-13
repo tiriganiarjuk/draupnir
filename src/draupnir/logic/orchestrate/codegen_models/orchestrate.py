@@ -9,9 +9,10 @@ Entry point: draupnir-generate-models → cli.py → run_codegen()
 
 import subprocess
 import sys
-import tomllib
 from pathlib import Path
 
+from draupnir.logic.impure.codegen_config.simple import load_codegen_config
+from draupnir.logic.impure.loader.primitive import config_schema_dir_path
 from draupnir.logic.transform.codegen_clean.composed import strip_redundant_constraints
 from draupnir.logic.transform.codegen_clean.primitive import strip_future_annotations
 
@@ -53,8 +54,8 @@ def generate_one_model(schema_path: Path, output_path: Path) -> bool:
 
 def run_codegen() -> int:
     """Generate all Pydantic input model modules from input schemas."""
-    config = tomllib.loads(CONFIG_PATH.read_text())
-    all_schemas = config["levels"]
+    config = load_codegen_config(CONFIG_PATH, Path(config_schema_dir_path()))
+    all_schemas = config.levels
 
     success = 0
     failed = 0

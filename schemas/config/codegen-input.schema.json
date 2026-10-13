@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codegen-input-schema-v1",
+  "title": "Codegen Input Config",
+  "description": "Maps each Verdandi input-schema name to the generated Pydantic module path under src/draupnir/structure/. Source: tools/codegen_input.toml. Read by draupnir-generate-models through read_toml_validate_json.",
+  "type": "object",
+  "required": ["levels"],
+  "additionalProperties": false,
+  "properties": {
+    "levels": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "enum": [
+          "pattern", "enum", "atom", "element", "tuple", "union", "field",
+          "simplearray", "simplegroup", "array", "group", "superarray",
+          "section", "shallowsection", "schema"
+        ]
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^gen/input/[a-z_]+$"
+      }
+    }
+  }
+}

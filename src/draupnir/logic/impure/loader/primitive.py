@@ -18,12 +18,29 @@ def level_file_path(root: Path, level_name: str, name: str) -> Path:
     return root / level_name / f"{name}.yaml"
 
 
-def schema_dir_path() -> str:
-    """Return the path to the input schema directory.
+def project_root() -> Path:
+    """The draupnir project root.
 
-    Traverses up from this file to the project root (6 parents:
-    this file → loader → impure → logic → draupnir → src → project root),
-    then into schemas/input/. These schemas are used by the Rust PyO3 gate
-    for YAML validation before Python model parsing.
+    Traverses up from this file (6 parents: this file → loader → impure →
+    logic → draupnir → src → project root). Used because the schemas/
+    directory is a sibling of the installed package, not inside it.
     """
-    return str(Path(__file__).resolve().parent.parent.parent.parent.parent.parent / "schemas" / "input")
+    return Path(__file__).resolve().parent.parent.parent.parent.parent.parent
+
+
+def schema_dir_path() -> str:
+    """Return the path to the input schema directory (schemas/input/).
+
+    These schemas are used by the Rust reader for YAML validation before
+    Python model parsing.
+    """
+    return str(project_root() / "schemas" / "input")
+
+
+def config_schema_dir_path() -> str:
+    """Return the path to the hand-written config schema directory (schemas/config/).
+
+    These schemas validate draupnir's own TOML configuration files through
+    the Rust readers before Python model parsing.
+    """
+    return str(project_root() / "schemas" / "config")

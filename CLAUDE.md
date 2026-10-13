@@ -293,8 +293,8 @@ when the project's architecture or documentation evolves.
 
 ## Recovery Sources (salvaged)
 
-### The input gate (file-validation boundary) — Rust internals
-The gate crate is `nornir/gates/gate_verdandi_input/`, built/deployed via `nornir_deploy --build gates`. Internally it does `fs::read_to_string(file_path)` → `yaml_to_json()` (from `format_core`) → validate against the JSON Schema → return the validated JSON string. Compiled schemas are held in a `Mutex<HashMap<String, Validator>>` cache. On failure it raises `ValueError` — it does NOT return a dict or an `{"ok": ...}` envelope. Python calls `Model.model_validate_json(json_string)` on the result; no `yaml.safe_load`, `json.loads`, or `file.read_text()` in Python.
+### The input reader (file-validation boundary) — Rust internals
+The reader crate is `nornir/readers/read_yaml_validate_json/`, built/deployed via `nornir_deploy --build readers`. It is a thin PyO3 wrapper over `nornir/capability/reader_io`, which does `fs::read_to_string(file_path)` → `yaml_to_json()` (from `format_core`) → validate against the JSON Schema named by level in `schema_dir` → return the validated JSON string. Compiled schemas are held in a `Mutex<HashMap<String, Validator>>` cache. On failure it raises `ValueError` — it does NOT return a dict or an `{"ok": ...}` envelope. Python calls `read_yaml_validate_json.read(file_path, level_name, schema_dir)` then `Model.model_validate_json(json_string)` on the result; no `yaml.safe_load`, `json.loads`, or `file.read_text()` in Python. The same reader family covers TOML, JSON, TOON, XML (`read_{format}_validate_json`) and tomlx (`read_tomlx_json`).
 
 ## Project Notes (salvaged)
 

@@ -70,13 +70,13 @@ The previous attempt to create input models by adding `| str` to existing ref ty
 
 ### The Pattern (same as Regin)
 
-Regin already generates Pydantic models from Draupnir's output schemas using `datamodel-code-generator` + post-processing. We reuse this exact pattern within Draupnir itself:
+Regin already generates Pydantic models from Draupnir's output schemas using `datamodel-code-generator`. We reuse this exact pattern within Draupnir itself:
 
 ```
 Original Verdandi models (hand-written, with model type refs)
   → model_json_schema() + ref-to-string transform (export_input_schemas.py already does this)
     → input schemas (15 JSON Schema files — already exist in schemas/input/)
-      → datamodel-code-generator + Regin-style post-processing
+      → datamodel-code-generator
         → generated input models (structure/gen/, with str ref fields)
 ```
 
@@ -88,16 +88,16 @@ Original Verdandi models (hand-written, with model type refs)
 - Generated models are always in sync with gate schemas (same source)
 - Change cascade is automated: change original model → re-export schemas → re-generate input models
 - The `built` dict keys become cache key strings (`built["atom/str"]`) instead of opaque `id()` integers
-- Regin's post-processing solves known `datamodel-code-generator` issues: `__future__` annotations breaking Pydantic, duplicate constraints on RootModel refs
+- `--disable-future-imports` keeps annotations as real types, which Pydantic needs for validation
 
 ### Regin Reference
 
 The model generation system to study is at:
 - **Script:** `regin/src/regin/generate_structures.py`
 - **Config:** `regin/src/regin/codegen_schemas.toml`
-- **Post-processing:** `regin/src/regin/logic/transform/codegen_clean/` (primitive.py, simple.py, composed.py)
+- **Post-processing (Regin only, strips duplicate constraints on RootModel refs):** `regin/src/regin/logic/transform/codegen_clean/` (primitive.py, simple.py, composed.py)
 
-Key flags: `--use-title-as-name`, `--use-standard-collections`, `--use-annotated`, `--input-file-type jsonschema`
+Key flags: `--use-title-as-name`, `--use-standard-collections`, `--use-annotated`, `--disable-future-imports`, `--input-file-type jsonschema`
 
 ## Implementation Implications
 

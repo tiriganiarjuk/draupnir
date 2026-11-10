@@ -1,8 +1,7 @@
 """Generate Pydantic input models from input validation schemas.
 
-Reads level mappings from tools/codegen_input.toml, runs
-datamodel-code-generator on each schema, and applies codegen cleanup
-transforms to the generated output.
+Reads level mappings from tools/codegen_input.toml and runs
+datamodel-code-generator on each schema.
 
 Entry point: draupnir-generate-models → cli.py → run_codegen()
 """
@@ -13,8 +12,6 @@ from pathlib import Path
 
 from draupnir.logic.impure.codegen_config.simple import load_codegen_config
 from draupnir.logic.impure.loader.primitive import config_schema_dir_path
-from draupnir.logic.transform.codegen_clean.composed import strip_redundant_constraints
-from draupnir.logic.transform.codegen_clean.primitive import strip_future_annotations
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent.parent
 SCHEMAS_DIR = PROJECT_ROOT / "schemas" / "input"
@@ -23,7 +20,7 @@ CONFIG_PATH = PROJECT_ROOT / "tools" / "codegen_input.toml"
 
 
 def generate_one_model(schema_path: Path, output_path: Path) -> bool:
-    """Run datamodel-code-generator on one schema and apply cleanup transforms.
+    """Run datamodel-code-generator on one schema.
 
     Returns True on success, False on failure.
     """
@@ -38,6 +35,7 @@ def generate_one_model(schema_path: Path, output_path: Path) -> bool:
             "--use-standard-collections",
             "--use-annotated",
             "--use-title-as-name",
+            "--disable-future-imports",
         ],
         capture_output=True,
         text=True,
@@ -45,10 +43,6 @@ def generate_one_model(schema_path: Path, output_path: Path) -> bool:
     if result.returncode != 0:
         sys.stderr.write(result.stderr)
         return False
-    content = output_path.read_text()
-    content = strip_future_annotations(content)
-    content = strip_redundant_constraints(content)
-    output_path.write_text(content)
     return True
 
 

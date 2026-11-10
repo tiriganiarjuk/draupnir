@@ -18,7 +18,11 @@ draupnir-export-schemas = "draupnir.cli:export_schemas_main"
 dev = [
     "pytest>=8.0",
     "jsonschema>=4.23",
-    "datamodel-code-generator>=0.26",
+    # Exact pin: structure/gen/ is reproducible only on this version.
+    # TODO: move to 0.91.0 — it changes the generated models
+    # (`exists: Literal[True] = True` becomes `Literal[True] | None = None`),
+    # so review that diff first.
+    "datamodel-code-generator==0.55.0",
 ]
 
 [build-system]

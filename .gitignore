@@ -3,3 +3,12 @@ __pycache__/
 *.egg-info/
 .ruff_cache/
 uv.lock
+
+# Orientation docs symlinked from ~/ai/control/instructions/ — one authored
+# home, schg-locked, linked into each project by scaffold_project.py (which can
+# recreate them with --link-only). Filesystem convention, not repo content: a
+# tracked symlink out of the repo dangles for anyone who clones it alone.
+EVERY_CHECK_IS_A_PROXY.md
+HOW_DATA_ENTERS.md
+THE_LEVEL_SYSTEM.md
+WHY_THIS_FEELS_WRONG.md

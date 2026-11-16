@@ -2,7 +2,7 @@
 
 Schema generator for the agent definition pipeline. Reads a typed composition hierarchy and compiles it into JSON Schema documents using directed graph traversal — no recursion.
 
-**Part of the agent definition pipeline:** [Verdandi](https://github.com/johnny111272/verdandi) → Draupnir → [Nornir](https://github.com/johnny111272/nornir) Gates → [Regin](https://github.com/johnny111272/regin) → Galdr
+**Part of the agent definition pipeline:** [Verdandi](https://github.com/tiriganiarjuk/verdandi) → Draupnir → [Nornir](https://github.com/tiriganiarjuk/nornir) Gates → [Regin](https://github.com/tiriganiarjuk/regin) → Galdr
 
 ## What This Is
 

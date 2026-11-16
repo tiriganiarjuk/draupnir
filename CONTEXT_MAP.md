@@ -49,13 +49,15 @@ The schema compiler: it turns the Verdandi YAML hierarchy into JSON Schema docum
 
 | Need | Read |
 |------|------|
-| deep architectural rationale, model definitions, export strategy | `DRAUPNIR_REDESIGN.md` |
+| what a Verdandi file may contain, as Draupnir models it | `src/draupnir/structure/model/` |
+| how the input schemas are exported and the input models generated | `~/ai/smidja/galdr/context/DRAUPNIR_ELEMENT.md` § The self-hosting loop, then `src/draupnir/logic/transform/schema_export/` |
 | where a function goes / what zone / what level | `THE_LEVEL_SYSTEM.md` |
 | how external data becomes typed / a shape has no model | `HOW_DATA_ENTERS.md` |
-| how to run it / what the flags are | `src/draupnir/cli.py` — the CLI is the truth. There is no `--all`; bare `uv run draupnir` is generate-everything |
+| how to run it / what the flags are | `src/draupnir/cli.py` — the CLI is the truth |
 | what the input hierarchy allows | `~/ai/smidja/verdandi/COMPOSITION_RULES.md` |
-| what the output is embedded into | `context/NORNIR_GATES_ELEMENT.md` |
+| what the output is embedded into | `~/ai/smidja/galdr/context/NORNIR_GATES_ELEMENT.md` |
+| how a reader's result is typed in Python, and the failure classes | `~/ai/smidja/nornir/MUST_READ_BEFORE_BUILDING.md` § Calling one from Python |
 | what a generated schema looks like | `~/ai/smidja/verdandi/{project}/output/*.schema.json` |
 | whether a generated schema drifted | `uv run draupnir --check` — compiles in memory, reports without writing |
-| the full forward cascade after an edit | `context/AGENT_BUILD_SYSTEM.md` § The forward cascade |
+| the full forward cascade after an edit | `~/ai/smidja/galdr/context/AGENT_BUILD_SYSTEM.md` § The forward cascade |
 | current state / what's left to build | read live — the code and `git log`. Nothing is stored |

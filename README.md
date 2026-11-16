@@ -6,7 +6,7 @@ Schema generator for the agent definition pipeline. Reads a typed composition hi
 
 ## What This Is
 
-Draupnir reads the composition hierarchy defined in Verdandi (~350 YAML files across 15 levels) and produces JSON Schema documents — 13 pipeline-stage schemas plus 7 include-fragment schemas — along with HTML sidecar visualisations.
+Draupnir reads a composition hierarchy defined in Verdandi (YAML files across 15 levels, one project at a time) and produces that project's JSON Schema documents: its top-level schemas, plus standalone schemas for the include fragments a definition may pull in.
 
 The generated schemas become the enforcement layer for the entire pipeline. Nornir's compiled gate modules embed these schemas at compile time for stage-boundary validation. Regin's Pydantic models are generated from these schemas. The schemas are the contract between every stage.
 
@@ -14,7 +14,7 @@ The generated schemas become the enforcement layer for the entire pipeline. Norn
 
 The central architectural decision in Draupnir is treating schema compilation as a graph problem rather than a tree-walking problem.
 
-The ~350 YAML files reference each other through string cache keys, forming a directed acyclic graph. The LLM coding assistant repeatedly attempted to solve this with complex recursive traversals — threading callable parameters through every builder, maintaining reverse indices, counting references through tree walks. The recursion kept fighting the architecture because it was encoding a graph problem into a tree-walk pattern.
+The YAML files reference each other through string cache keys, forming a directed acyclic graph. The LLM coding assistant repeatedly attempted to solve this with complex recursive traversals — threading callable parameters through every builder, maintaining reverse indices, counting references through tree walks. The recursion kept fighting the architecture because it was encoding a graph problem into a tree-walk pattern.
 
 The solution was to recognise what the data actually is: a network graph. Draupnir builds a NetworkX directed graph where nodes are type definitions and edges are references. Once the graph exists, every operation that recursion struggled with becomes an intrinsic graph property:
 
@@ -27,17 +27,22 @@ The entire compilation is a linear walk over the topologically sorted graph. Zer
 
 ## Key Concepts
 
-**Supply-driven loading.** Levels load in declaration order (pattern first, schema last). Reference fields are resolved during model validation via Pydantic BeforeValidators. Every model is in final form from the moment it validates — there is no separate resolution step. Loading is the pipeline.
+**Supply-driven loading.** Levels load in declaration order (pattern first, schema last), so every reference a file names is already loaded when the file validates. A reference stays the string it was authored as: it is the cache key, and it becomes an edge in the graph. Every model is in final form from the moment it validates. Loading is the pipeline.
 
-**Pure/impure boundary.** I/O exists in exactly two files: `loader.py` (reads) and `writer.py` (writes). Everything else is pure computation. The graph build, traversal, and schema compilation are entirely pure.
+**Typed at the door.** Draupnir imports no YAML parser. A compiled Nornir reader reads each file, validates it against its level's schema, and returns either the validated JSON or a refusal carrying its failure class. A refusal stops the run.
+
+**The self-hosting loop.** The models that define what a Verdandi file may contain are exported as the input schemas the reader validates against, and the input models that parse the reader's output are generated from those same schemas. One definition, two consumers.
+
+**Pure/impure boundary.** I/O lives in the impure zone: the reader wrappers on the way in, the writer on the way out. The graph build, traversal, and schema compilation are entirely pure.
 
 **Zone-aware edges.** Edges carry metadata about their zone context (required, optional, conditional) and when-conditions. This means the graph encodes not just what references what, but the semantic relationship — whether a reference is mandatory, optional, or conditionally present based on other field values.
 
 ## Usage
 
 ```bash
-uv run draupnir                  # Generate all schemas
-uv run draupnir --project <name>       # Generate schemas for a single project
+uv run draupnir                    # Generate every project's schemas and fragments
+uv run draupnir --project <name>   # Generate one project
+uv run draupnir --check            # Report drift without writing
 ```
 
 After regenerating schemas, rebuild downstream:

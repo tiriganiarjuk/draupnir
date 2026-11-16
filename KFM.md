@@ -23,7 +23,7 @@ not the README. It has a name that tells you nothing on purpose. That is not tid
 is the point:
 
 > A list of failure modes read *before* you have a model of the project is not a warning,
-> it is a set of suggestions. Naming a mistake supplies it. And a vivid catalogue of nine
+> it is a set of suggestions. Naming a mistake supplies it. And a vivid catalogue of
 > concrete failures shadows the orientation gate it sits above — a reader absorbs the
 > stories, feels informed about the project, and skips the documents that would actually
 > have oriented them.
@@ -40,86 +40,43 @@ is a description of the tree as it stands now — check anything concrete agains
 before acting on it.
 
 **Maintenance:** an entry retires when its vector is gone. A trap guarding code that no
-longer exists is worse than no trap, because it is the rigid layer asserting something
-false. This has already happened once. Nothing automatic enforces it.
+longer exists is worse than no trap, because it is a confident false claim in the one
+document a reader reaches for after something has already broken. Nothing automatic
+enforces this.
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- EVERYTHING ABOVE THIS LINE IS THE PRELUDE — DO NOT MODIFY              -->
+<!-- EVERYTHING BELOW IS PROJECT-SPECIFIC AND GROWS ONLY FROM REAL FAILURES -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
 
 ---
 
-## You Will Get These Things Wrong
+### A step that turns references into something else
+**Detection:** If you find yourself writing a function, a validator or a pass whose job is to look a reference up and replace it with the thing it names...
+**Why it's wrong:** A reference is a graph edge and stays the string it was authored as. A lookup step creates a half-formed state every consumer then has to handle, and it was built and scrapped here more than once.
+**Recovery:** `~/ai/smidja/galdr/context/DRAUPNIR_ELEMENT.md` § Loading is the pipeline, and § Why a graph.
 
-### Creating a "resolve" function
-**Detection:** If you find yourself writing `def resolve(`, `resolve_refs`, `resolve_walked_`, `ResolvedNode`...
-**Why it's wrong:** There is no resolution step. String refs in YAML files ARE the graph edges. They stay as strings in the generated input models. The network graph uses them directly. Three attempts at resolution functions all failed.
-**Recovery:** Read `src/draupnir/WHY_NETWORK_GRAPHS_ARE_THE_SOLUTION.md`
+### Loosening a type that both loading and output use
+**Detection:** If you find yourself widening a shared type so that input parsing will accept one more shape, or writing an input model by hand...
+**Why it's wrong:** A type shared between input loading and schema output reaches every generated schema, so loosening it for the loader's convenience loosens the whole pipeline's validation at once. Input models are generated from the exported schemas, which is what keeps the validator and the parser the same definition.
+**Recovery:** `~/ai/smidja/galdr/context/DRAUPNIR_ELEMENT.md` § The self-hosting loop, and § Why a graph.
 
-### Hand-writing input model types
-**Detection:** If you find yourself writing `InputAtom`, `InputPattern`, or adding `| str` to existing ref type aliases...
-**Why it's wrong:** Input models are GENERATED from input schemas using `datamodel-code-generator` (same pattern as Regin). Adding `| str` to existing ref type aliases poisons output schemas for the entire pipeline. This was tried and catastrophically failed.
-**Recovery:** Read `src/draupnir/WHY_WE_KEEP_GETTING_STUCK.md` "Attempt 3". Use the schema export + generation approach.
+### A conditional whose `if` matches when the predicate field is absent
+**Detection:** If you find yourself emitting an `if`/`then`/`else` whose `if` block constrains a property without also requiring it...
+**Why it's wrong:** A JSON Schema `if` that only constrains a property is satisfied when that property is missing, so the branch applies to data the condition was never meant to cover.
+**Recovery:** `~/ai/smidja/galdr/context/VERDANDI_ELEMENT.md` § Conditionals for what each keyword must mean; the conditional builders in the transform zone for where it is emitted.
 
-### Putting IO outside the gate/writer boundary
-**Detection:** If you find yourself writing `Path.read_text()`, `open()`, `yaml.safe_load()` in Python...
-**Why it's wrong:** The Rust PyO3 gate reads files. It takes `file_path`, not `yaml_content`. No `yaml.safe_load()` in Python. The gate IS the IO boundary for reads. `writer.py` is the IO boundary for writes. Everything between is pure.
-**Recovery:** Read `logic/impure/loader/ffi.py` — that's the gate FFI wrapper.
+### Testing for a dot anywhere to find a cross-section predicate
+**Detection:** If you find yourself deciding whether a predicate reaches another section by checking whether its target contains a dot...
+**Why it's wrong:** Scope is carried by one position, not by the presence of a character, and a containment test misclassifies targets at the schema root.
+**Recovery:** `~/ai/smidja/galdr/context/VERDANDI_ELEMENT.md` § Conditionals.
 
-### Using BeforeValidator for ref types
-**Detection:** If you find yourself writing `BeforeValidator(ref_from_cache)` on ref fields...
-**Why it's wrong:** The old "models hold models" approach with BeforeValidator is gone. The new architecture uses generated input models with `str` ref fields. String refs stay as strings — they are the graph edges. No cache lookup during validation.
-**Recovery:** Read `src/draupnir/WHY_NETWORK_GRAPHS_ARE_THE_SOLUTION.md` "Input Models: Generated, Not Hand-Written"
+### Rewriting a schema's references to its own type during export
+**Detection:** If you find yourself applying one replacement pass over every type name in an exported input schema...
+**Why it's wrong:** The model being exported must be left out of the pass that rewrites reference fields, or the schema replaces references to itself and comes out corrupted while still looking well-formed.
+**Recovery:** `~/ai/smidja/galdr/context/DRAUPNIR_ELEMENT.md` § The self-hosting loop for what the export is for; the schema-export transform for the pass itself.
 
-### Building recursive dispatch
-**Detection:** If you find yourself writing `build_fn: Callable`, `build_or_ref`, `build_model` with recursive calls...
-**Why it's wrong:** Recursive dispatch creates upward dependencies (leaf calls root). Three attempts failed. 28 Callable DI violations. The architecture correctly forbids this. All recursive dispatch code has been deleted.
-**Recovery:** Read `src/draupnir/WHY_WE_KEEP_GETTING_STUCK.md`. The solution is a flat loop over topological sort order using the `built` dict.
-
-### Reaching for `dict` (CANARY — you may need a context refresh)
-**Detection:** If you find yourself writing `dict[str, ...]`, passing dicts between functions, building dicts from YAML data, or using dict as an intermediate representation...
-**Why it's wrong:** This system passes TYPED PYDANTIC MODELS everywhere. YAML validates straight into models. Models hold models. The builder receives models and returns models. `model_dump()` happens ONCE, at the writer boundary. If you're reaching for dict, you've lost the architecture — you're probably thinking in generic Python instead of this system's model-holds-model design.
-**Recovery:** STOP. This is a canary. Re-read DRAUPNIR_REDESIGN.md §7 and the architecture paragraph in "Context Reminders" below. The answer is almost never dict — it's a typed model or a typed model field.
-
-### Treating YAML data as "arbitrary" or "dynamic"
-**Detection:** If you find yourself writing "arbitrary YAML dict", "dynamic structure", "unknown shape", or handling YAML data as untyped...
-**Why it's wrong:** Every YAML shape in Verdandi is KNOWN. There are exactly 14 level formats, each with a known structure. The `{oneOf: [...]}` dict is not "arbitrary" — it's a specific, known shape with a model (`ArrayOneOf`, `SuperarrayOneOf`). If you think a YAML value is untyped, you haven't read the YAML files for that level.
-**Recovery:** Read the actual YAML files in `tools/verdandi/<level>/`. Identify the shape. Create or find the model for it. Use Pydantic's union matching if a field accepts multiple known shapes.
-
-### Adding methods to models
-**Detection:** If you find yourself adding `def`, `@property`, `@model_validator` that contains logic, classmethod factories...
-**Why it's wrong:** Models in `structures/` are frozen data containers. Zero methods. Validators that enforce structural invariants (like "at least one of required/optional/conditional") are the ONE exception — and even those are simple boolean checks, not logic.
-**Recovery:** Look at the models. They're `ConfigDict(frozen=True)` with typed fields. That's it.
-
-### Writing long functions
-**Detection:** If you're still writing and the function keeps growing...
-**Why it's wrong:** A long function is doing more than one thing. Decompose NOW, not later. "I'll clean this up later" means it ships broken. Gleipnir will catch it — but the real problem is architectural, not numerical.
-**Recovery:** Split the function. Each piece does one thing.
-
-### Using `Any` anywhere
-**Detection:** If you find yourself writing `: Any`, `dict[str, Any]`, `-> Any`...
-**Why it's wrong:** Every value in this system has a known type. The YAML shapes are known. The models are typed. The output is typed. If you think you need `Any`, you haven't understood the data at that point.
-**Recovery:** Trace the data. What type is it ACTUALLY? Create a model for it.
-
-### Re-exporting from `__init__.py`
-**Detection:** If you find yourself writing `from .fields import Pattern, Atom` in `__init__.py`...
-**Why it's wrong:** `__init__.py` files are ALWAYS EMPTY. Direct imports only: `from draupnir.structures.fields import Pattern`.
-**Recovery:** Delete the re-export. Fix the import at the call site.
-
-### Calling the structures directory "models"
-**Detection:** If you create `src/draupnir/models/`...
-**Why it's wrong:** The convention is `structures/`. Models is the Pydantic term. Structures is our term. The directory has always been called structures.
-**Recovery:** Rename to `structures/`.
-
-### Using leading underscore names
-**Detection:** If you find yourself writing `def _validate_ref(`, `def _build_properties(`, `_helper_function`...
-**Why it's wrong:** No leading underscore names. Period. The "private" convention is an OOP pattern for hiding implementation behind interfaces. In FP, every function is a composable public unit. If a function does one thing and is pure, there's no reason to hide it.
-**Recovery:** Remove the underscore. If the name collides, choose a better name.
-
-### Using nullable wrapping in schema export
-**Detection:** If you find yourself writing `SchemaNullableObject`, `SchemaNullType`, or wrapping sections in `oneOf: [schema, {type: null}]`...
-**Why it's wrong:** Nullable is removed. Investigation confirmed that generated Pydantic models collapse nullable and optional into `| None = None` (row 3). TOML has no null. Pipeline processors don't distinguish. The oneOf wrapping was dead weight.
-**Recovery:** Use `optional` zone instead. See `tools/verdandi/PLAN_SCHEMA_ZONE_UNIFICATION.md`.
-
-### Detecting cross-section conditionals by internal dots
-**Detection:** If you find yourself writing `"." in when.field` to detect cross-section conditionals...
-**Why it's wrong:** Cross-section paths now use a leading dot: `.indirect.dispatch.dispatch_mode`. The old heuristic (`"." in field`) is ambiguous at the schema root level where siblings are sections. The new detection is `when.field.startswith(".")`.
-**Recovery:** Use `startswith(".")` and strip the leading dot before splitting into path segments.
-
----
+### Expressing "may be absent" as a nullable wrapper
+**Detection:** If you find yourself wrapping a section or field so that it accepts either its schema or null...
+**Why it's wrong:** The data format has no null and the generated models give absent and null the same type, so the wrapper adds a branch nothing downstream can tell apart. Absence is expressed by the zone.
+**Recovery:** `~/ai/smidja/verdandi/PLAN_SCHEMA_ZONE_UNIFICATION.md`.

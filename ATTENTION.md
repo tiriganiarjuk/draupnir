@@ -11,14 +11,8 @@ every nornir gate returns:
 - `ok` true → `data` is the validated JSON string, on its way into `Model.model_validate_json`.
 - `ok` false → `error.type` names the failure class, `error.message` is the educational text.
 
-| `error.type` | Meaning |
-|---|---|
-| `read_error` | the file could not be read |
-| `parse_error` | the file is not valid in its format |
-| `conversion_error` | the converted JSON was invalid (an engine fault) |
-| `schema_error` | the schema could not be loaded or compiled |
-| `validation_error` | the data does not match the schema |
-| `cache_error` | the validator cache failed (an engine fault) |
+The failure classes are tabled in `~/ai/smidja/nornir/MUST_READ_BEFORE_BUILDING.md`
+§ `error.type`, generated from the error registry.
 
 ## What breaks here
 
@@ -30,8 +24,12 @@ fails until the wrappers are fixed:
 
 ## The fix
 
-Type the result at the wrapper: a frozen model of the contract in `structure/`, validated from
-the reader's return, and the caller branches on `ok` and `error.type`. Decide per call site what
-each `error.type` means for this project — hard failure, held back, reported.
+Type the result at the wrapper with the two-outcome model in `structure/`: a success model with
+`ok: Literal[True]` and a refusal model with `ok: Literal[False]`, joined by
+`Field(discriminator="ok")` — the form `~/ai/smidja/nornir/MUST_READ_BEFORE_BUILDING.md`
+§ Calling one from Python shows, working in Galdr at
+`~/ai/smidja/galdr/src/galdr/structure/model/gate_types.py`. The caller matches on the outcome's
+type; a refusal carries `error.type` to branch on. Decide per call site what each `error.type`
+means for this project — hard failure, held back, reported.
 
 Delete this file when the fix is in.

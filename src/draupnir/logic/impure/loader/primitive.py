@@ -8,12 +8,7 @@ installed package, not inside it.
 
 from pathlib import Path
 
-from draupnir.structure.model.reader_outcome import ReaderRefusal
-
-
-def refusal_text(refusal: ReaderRefusal) -> str:
-    """One line for a refused read: the failure class, then the message."""
-    return f"{refusal.error.type}: {refusal.error.message}"
+from draupnir.structure.config.schema_location import SchemaLocation
 
 
 def level_file_path(root: Path, level_name: str, name: str) -> Path:
@@ -51,3 +46,11 @@ def config_schema_dir_path() -> str:
     the Rust readers before Python model parsing.
     """
     return str(project_root() / "schemas" / "config")
+
+
+def json_schema_document_schema() -> SchemaLocation:
+    """The schema every schema file is written and read against: a JSON Schema document."""
+    return SchemaLocation(
+        name="json-schema-document",
+        directory=str(project_root() / "schemas" / "config"),
+    )

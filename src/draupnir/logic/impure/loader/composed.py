@@ -15,10 +15,11 @@ from pathlib import Path
 
 from pydantic import BaseModel, ValidationError
 
-from draupnir.logic.impure.loader.primitive import refusal_text, schema_dir_path
+from draupnir.logic.impure.loader.primitive import schema_dir_path
 from draupnir.logic.impure.loader.simple import load_one
+from draupnir.logic.pure.refusal_format.primitive import refusal_text
 from draupnir.structure.config.levels import Level
-from draupnir.structure.model.reader_outcome import ReaderRefusal
+from draupnir.structure.model.tool_outcome import ToolRefusal
 
 
 def load_all_levels(
@@ -49,7 +50,7 @@ def load_all_levels(
             except ValidationError as exc:
                 errors.append(f"LOAD ERROR: {cache_key}: {exc}")
                 continue
-            if isinstance(loaded, ReaderRefusal):
+            if isinstance(loaded, ToolRefusal):
                 errors.append(f"LOAD ERROR: {cache_key}: {refusal_text(loaded)}")
                 continue
             cache[cache_key] = loaded

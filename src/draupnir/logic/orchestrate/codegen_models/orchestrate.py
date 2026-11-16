@@ -11,8 +11,9 @@ import sys
 from pathlib import Path
 
 from draupnir.logic.impure.codegen_config.simple import load_codegen_config
-from draupnir.logic.impure.loader.primitive import config_schema_dir_path, refusal_text
-from draupnir.structure.model.reader_outcome import ReaderRefusal
+from draupnir.logic.impure.loader.primitive import config_schema_dir_path
+from draupnir.logic.pure.refusal_format.primitive import refusal_text
+from draupnir.structure.model.tool_outcome import ToolRefusal
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent.parent
 SCHEMAS_DIR = PROJECT_ROOT / "schemas" / "input"
@@ -53,7 +54,7 @@ def run_codegen() -> int:
     A refused config read generates nothing and returns 1.
     """
     config = load_codegen_config(CONFIG_PATH, Path(config_schema_dir_path()))
-    if isinstance(config, ReaderRefusal):
+    if isinstance(config, ToolRefusal):
         sys.stderr.write(f"CONFIG ERROR: {CONFIG_PATH}: {refusal_text(config)}\n")
         return 1
     return generate_all_models(config.levels)

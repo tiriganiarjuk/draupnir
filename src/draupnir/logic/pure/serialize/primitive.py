@@ -23,3 +23,8 @@ def serialize_schema(document: SchemaDocument | FragmentDocument) -> str:
 def schema_filename(schema_key: str) -> str:
     """Convert cache key to output filename: 'schema/foo' -> 'foo.schema.json'."""
     return schema_key.split("/", 1)[1] + ".schema.json"
+
+
+def fragment_filename(fragment_name: str) -> str:
+    """Convert fragment name to output filename: 'include_foo_bar' -> 'include-foo-bar.schema.json'."""
+    return fragment_name.replace("_", "-") + ".schema.json"

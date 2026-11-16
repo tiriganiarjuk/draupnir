@@ -29,7 +29,7 @@ from pydantic import BaseModel
 
 from draupnir.logic.impure.loader.composed import load_all_levels
 from draupnir.logic.impure.pipeline.composed import check_schema_drift
-from draupnir.logic.pure.serialize.primitive import schema_filename
+from draupnir.logic.pure.serialize.simple import named_documents
 from draupnir.logic.impure.pipeline.simple import (
     args_to_paths,
     context_to_paths,
@@ -38,7 +38,7 @@ from draupnir.logic.impure.pipeline.simple import (
     optional_path,
     resolve_paths,
 )
-from draupnir.logic.impure.writer.simple import write_schema
+from draupnir.logic.impure.writer.simple import write_schemas
 from draupnir.logic.pure.cross_section.composed import (
     adapt_edge_when,
     collect_section_graph_conditionals,
@@ -260,16 +260,14 @@ def run_generate(
     if isinstance(result, str):
         sys.stderr.write(result + "\n")
         return 1
-    graph = result
-    schemas = export_all_schemas(graph)
-    for cache_key, document in schemas.items():
-        filename = schema_filename(cache_key)
-        write_schema(document, output_dir / filename)
-        sys.stdout.write(f"  wrote {filename}\n")
-    fragments = export_fragments(graph)
-    for name, document in fragments.items():
-        filename = f"{name.replace('_', '-')}.schema.json"
-        write_schema(document, output_dir / filename)
+    schemas = export_all_schemas(result)
+    fragments = export_fragments(result)
+    documents = named_documents(schemas, fragments)
+    errors = write_schemas(documents, output_dir)
+    if errors:
+        sys.stderr.write("\n".join(errors) + "\n")
+        return 1
+    for filename in documents:
         sys.stdout.write(f"  wrote {filename}\n")
     sys.stdout.write(f"\n{len(schemas)} schemas + {len(fragments)} fragments -> {output_dir}\n")
     return 0
@@ -288,8 +286,8 @@ def run_check(
     if isinstance(result, str):
         sys.stderr.write(result + "\n")
         return 1
-    schemas = export_all_schemas(result)
-    messages = check_schema_drift(schemas, output_dir)
+    documents = named_documents(export_all_schemas(result), export_fragments(result))
+    messages = check_schema_drift(documents, output_dir)
     for message in messages:
         sys.stderr.write(message + "\n")
     return 1 if messages else 0
@@ -304,9 +302,10 @@ def run_fragments(
     if isinstance(result, str):
         sys.stderr.write(result + "\n")
         return 1
-    fragments = export_fragments(result)
-    for name, document in fragments.items():
-        write_schema(document, output_dir / f"{name.replace('_', '-')}.schema.json")
+    errors = write_schemas(named_documents({}, export_fragments(result)), output_dir)
+    if errors:
+        sys.stderr.write("\n".join(errors) + "\n")
+        return 1
     return 0
 
 

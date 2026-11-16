@@ -2,36 +2,43 @@
 
 CC=4-8 functions.
 
-check_schema_drift: compares freshly compiled schemas against what's on disk.
-  Used by --check mode to detect when source YAML changed but schemas weren't
-  regenerated. Serializes each compiled schema and does string comparison
-  against the file content (rstrip to handle trailing newline differences).
+check_schema_drift: compares freshly compiled documents against what is on
+  disk. Used by --check mode to detect that source YAML changed and the
+  output was not regenerated, or that a generated file was edited. Each
+  on-disk file is read through the JSON reader, validated as a JSON Schema
+  document, and compared with the compiled document as JSON values.
 """
 
 from pathlib import Path
 
-from draupnir.logic.pure.serialize.primitive import schema_filename, serialize_schema
-from draupnir.structure.model.schema_output import SchemaDocument
+from draupnir.logic.impure.loader.primitive import json_schema_document_schema
+from draupnir.logic.impure.pipeline.ffi import read_json_text
+from draupnir.logic.pure.refusal_format.primitive import refusal_text
+from draupnir.logic.pure.serialize.primitive import serialize_schema
+from draupnir.structure.model.json_document import JsonDocument
+from draupnir.structure.model.schema_output import FragmentDocument, SchemaDocument
+from draupnir.structure.model.tool_outcome import ToolRefusal
 
 
 def check_schema_drift(
-    schemas: dict[str, SchemaDocument],
+    documents: dict[str, SchemaDocument | FragmentDocument],
     output_dir: Path,
 ) -> list[str]:
-    """Compare compiled schemas against on-disk files. Returns list of drift messages.
+    """Compare compiled documents against on-disk files. Returns list of drift messages.
 
-    Detects two types of drift: missing files (not yet generated) and content
-    differences (source YAML changed but output not regenerated). Serializes
-    each schema fresh to compare, ensuring the comparison uses the same
-    formatting as write_schema would produce.
+    One message per file that differs: `unreadable` when the reader refuses
+    it (absent, not JSON, not a JSON Schema document), `drifted` when it
+    holds a different JSON value from the compiled document.
     """
+    schema = json_schema_document_schema()
     messages: list[str] = []
-    for cache_key, document in schemas.items():
-        path = output_dir / schema_filename(cache_key)
-        if not path.exists():
-            messages.append(f"missing: {path}")
+    for filename, document in documents.items():
+        path = output_dir / filename
+        outcome = read_json_text(str(path), schema)
+        if isinstance(outcome, ToolRefusal):
+            messages.append(f"unreadable: {path}: {refusal_text(outcome)}")
             continue
-        expected = serialize_schema(document)
-        if path.read_text().rstrip() != expected:
+        compiled = JsonDocument.model_validate_json(serialize_schema(document))
+        if JsonDocument.model_validate_json(outcome.data) != compiled:
             messages.append(f"drifted: {path}")
     return messages

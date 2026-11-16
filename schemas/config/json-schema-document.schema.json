@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "json-schema-document",
+  "title": "JSON Schema document",
+  "description": "A document that is itself a JSON Schema: valid against the official 2020-12 metaschema, which the validator carries compiled in.",
+  "$ref": "https://json-schema.org/draft/2020-12/schema"
+}

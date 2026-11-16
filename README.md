@@ -33,7 +33,9 @@ The entire compilation is a linear walk over the topologically sorted graph. Zer
 
 **The self-hosting loop.** The models that define what a Verdandi file may contain are exported as the input schemas the reader validates against, and the input models that parse the reader's output are generated from those same schemas. One definition, two consumers.
 
-**Pure/impure boundary.** I/O lives in the impure zone: the reader wrappers on the way in, the writer on the way out. The graph build, traversal, and schema compilation are entirely pure.
+**Validated on the way out.** Every schema is written by a compiled Nornir writer, which first validates it as a JSON Schema document against the official 2020-12 metaschema it carries compiled in. `--check` reads the files back through a Nornir reader and compares them with what the compiler produces.
+
+**Pure/impure boundary.** I/O lives in the impure zone: the reader wrappers on the way in, the writer wrapper on the way out. The graph build, traversal, and schema compilation are entirely pure.
 
 **Zone-aware edges.** Edges carry metadata about their zone context (required, optional, conditional) and when-conditions. This means the graph encodes not just what references what, but the semantic relationship — whether a reference is mandatory, optional, or conditionally present based on other field values.
 

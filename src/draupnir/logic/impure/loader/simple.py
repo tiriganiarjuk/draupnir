@@ -22,21 +22,21 @@ from pydantic import BaseModel
 from draupnir.logic.impure.loader.ffi import gate_validate
 from draupnir.logic.impure.loader.primitive import level_file_path
 from draupnir.structure.config.input_models import InputLevel
-from draupnir.structure.model.reader_outcome import ReaderRefusal
+from draupnir.structure.model.tool_outcome import ToolRefusal
 
 
 def load_one(
     root: Path, level_name: str, name: str, schema_dir: str,
-) -> BaseModel | ReaderRefusal:
+) -> BaseModel | ToolRefusal:
     """Load a single Verdandi YAML file via gate into a generated input model.
 
-    Returns the input model, or the gate's ReaderRefusal when the file was
+    Returns the input model, or the gate's ToolRefusal when the file was
     refused. model_validate_json parses directly from the validated JSON
     string the success carries.
     """
     file_path = str(level_file_path(root, level_name, name))
     outcome = gate_validate(file_path, level_name, schema_dir)
-    if isinstance(outcome, ReaderRefusal):
+    if isinstance(outcome, ToolRefusal):
         return outcome
     model_class = InputLevel[level_name].value
     return model_class.model_validate_json(outcome.data)

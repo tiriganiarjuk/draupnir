@@ -11,7 +11,8 @@ import sys
 from pathlib import Path
 
 from draupnir.logic.impure.codegen_config.simple import load_codegen_config
-from draupnir.logic.impure.loader.primitive import config_schema_dir_path
+from draupnir.logic.impure.loader.primitive import config_schema_dir_path, refusal_text
+from draupnir.structure.model.reader_outcome import ReaderRefusal
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent.parent
 SCHEMAS_DIR = PROJECT_ROOT / "schemas" / "input"
@@ -47,10 +48,19 @@ def generate_one_model(schema_path: Path, output_path: Path) -> bool:
 
 
 def run_codegen() -> int:
-    """Generate all Pydantic input model modules from input schemas."""
-    config = load_codegen_config(CONFIG_PATH, Path(config_schema_dir_path()))
-    all_schemas = config.levels
+    """Generate all Pydantic input model modules from input schemas.
 
+    A refused config read generates nothing and returns 1.
+    """
+    config = load_codegen_config(CONFIG_PATH, Path(config_schema_dir_path()))
+    if isinstance(config, ReaderRefusal):
+        sys.stderr.write(f"CONFIG ERROR: {CONFIG_PATH}: {refusal_text(config)}\n")
+        return 1
+    return generate_all_models(config.levels)
+
+
+def generate_all_models(all_schemas: dict[str, str]) -> int:
+    """Run the generator for each schema-name → module-name pair; 1 if any failed."""
     success = 0
     failed = 0
     for schema_name, module_name in all_schemas.items():

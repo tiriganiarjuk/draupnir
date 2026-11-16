@@ -7,10 +7,21 @@ readers/). Isolated in its own module so a missing compiled reader fails as
 
 import read_toml_validate_json
 
+from draupnir.structure.model.reader_outcome import (
+    ReaderOutcome,
+    ReaderRefusal,
+    ReaderSuccess,
+)
 
-def read_codegen_config(file_path: str, schema_name: str, schema_dir: str) -> str:
-    """Read the codegen config TOML, validate against the named schema, return a JSON string.
 
-    Raises ValueError on read, parse, schema-load or validation failure.
+def read_codegen_config(
+    file_path: str, schema_name: str, schema_dir: str,
+) -> ReaderSuccess | ReaderRefusal:
+    """Read the codegen config TOML, validate against the named schema, type the result.
+
+    A ReaderSuccess carries the validated JSON string in `data`. A
+    ReaderRefusal carries the failure class in `error.type` and the message
+    in `error.message`.
     """
-    return read_toml_validate_json.read(file_path, schema_name, schema_dir)
+    result = read_toml_validate_json.read(file_path, schema_name, schema_dir)
+    return ReaderOutcome.model_validate(result).root

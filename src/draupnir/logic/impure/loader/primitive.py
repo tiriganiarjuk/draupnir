@@ -8,6 +8,13 @@ installed package, not inside it.
 
 from pathlib import Path
 
+from draupnir.structure.model.reader_outcome import ReaderRefusal
+
+
+def refusal_text(refusal: ReaderRefusal) -> str:
+    """One line for a refused read: the failure class, then the message."""
+    return f"{refusal.error.type}: {refusal.error.message}"
+
 
 def level_file_path(root: Path, level_name: str, name: str) -> Path:
     """Build the filesystem path for a Verdandi YAML file.

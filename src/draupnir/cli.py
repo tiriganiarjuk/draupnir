@@ -11,6 +11,8 @@ Default mode generates all schemas and fragments. --check, --list, and
 
 import typer
 
+from draupnir.logic.orchestrate.codegen_models.orchestrate import run_codegen
+from draupnir.logic.orchestrate.codegen_schemas.orchestrate import run_export
 from draupnir.logic.orchestrate.compile.orchestrate import run_pipeline
 from draupnir.structure.config.pipeline import PipelineArgs
 
@@ -54,13 +56,9 @@ def main() -> None:
 
 def generate_models_main() -> None:
     """Entry point for pyproject.toml — draupnir-generate-models."""
-    from draupnir.logic.orchestrate.codegen_models.orchestrate import run_codegen
-
     raise SystemExit(run_codegen())
 
 
 def export_schemas_main() -> None:
     """Entry point for pyproject.toml — draupnir-export-schemas."""
-    from draupnir.logic.orchestrate.codegen_schemas.orchestrate import run_export
-
     raise SystemExit(run_export())

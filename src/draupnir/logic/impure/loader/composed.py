@@ -3,22 +3,22 @@
 CC=4+. Populates the model cache by iterating the Level enum in
 dependency order (pattern → atom → element → ... → schema). Order
 matters because the graph builder assumes all referenced models exist
-in the cache when processing a node. Missing level directories are
-silently skipped (not all projects use all levels).
+in the cache when processing a node. A level directory a project does not
+have is passed over (not all projects use all levels).
 
 Errors are collected rather than raised immediately — this allows
 reporting all validation failures in one pass rather than stopping
 at the first broken file.
 """
 
-import sys
 from pathlib import Path
 
 from pydantic import BaseModel, ValidationError
 
-from draupnir.logic.impure.loader.primitive import schema_dir_path
+from draupnir.logic.impure.loader.primitive import refusal_text, schema_dir_path
 from draupnir.logic.impure.loader.simple import load_one
 from draupnir.structure.config.levels import Level
+from draupnir.structure.model.reader_outcome import ReaderRefusal
 
 
 def load_all_levels(
@@ -27,11 +27,13 @@ def load_all_levels(
     """Populate cache with all Verdandi YAML files, bottom-up by level.
 
     Cache keys are "level/name" (e.g., "atom/safe-string", "schema/task").
-    Sorted glob ensures deterministic ordering within each level. Both
-    ValueError (gate validation failure) and ValidationError (Pydantic
-    model parse failure) are caught — both indicate malformed input YAML.
+    Sorted glob ensures deterministic ordering within each level. A file
+    enters the cache only as a parsed input model: a gate refusal (any
+    failure class) and a ValidationError (Pydantic model parse failure)
+    each leave it out and add an error. A root that yields no files at all
+    is an error too.
 
-    Returns a list of error messages (empty on success).
+    Returns a list of error messages (empty on success). The caller reports them.
     """
     schema_dir = schema_dir_path()
     errors: list[str] = []
@@ -43,8 +45,14 @@ def load_all_levels(
             name = yaml_path.stem
             cache_key = f"{level.name}/{name}"
             try:
-                cache[cache_key] = load_one(root, level.name, name, schema_dir)
-            except (ValueError, ValidationError) as exc:
-                errors.append(f"{cache_key}: {exc}")
-                sys.stderr.write(f"  LOAD ERROR: {cache_key}: {exc}\n")
+                loaded = load_one(root, level.name, name, schema_dir)
+            except ValidationError as exc:
+                errors.append(f"LOAD ERROR: {cache_key}: {exc}")
+                continue
+            if isinstance(loaded, ReaderRefusal):
+                errors.append(f"LOAD ERROR: {cache_key}: {refusal_text(loaded)}")
+                continue
+            cache[cache_key] = loaded
+    if not cache and not errors:
+        errors.append(f"LOAD ERROR: no Verdandi files found under {root}")
     return errors

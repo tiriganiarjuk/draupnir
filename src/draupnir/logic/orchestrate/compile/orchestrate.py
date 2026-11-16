@@ -28,12 +28,15 @@ import networkx as nx
 from pydantic import BaseModel
 
 from draupnir.logic.impure.loader.composed import load_all_levels
-from draupnir.logic.impure.pipeline.composed import check_schema_drift, resolve_paths
+from draupnir.logic.impure.pipeline.composed import check_schema_drift
 from draupnir.logic.pure.serialize.primitive import schema_filename
 from draupnir.logic.impure.pipeline.simple import (
     args_to_paths,
     context_to_paths,
     find_workspace_root,
+    list_projects,
+    optional_path,
+    resolve_paths,
 )
 from draupnir.logic.impure.writer.simple import write_schema
 from draupnir.logic.pure.cross_section.composed import (
@@ -360,9 +363,9 @@ def resolve_workspace(
 ) -> tuple[Path, Path] | str:
     """Resolve workspace root and derive Verdandi/output paths.
 
-    Auto-discovers workspace by walking up from this file's location.
-    Falls back to explicit paths if workspace can't be found. Returns
-    error string when neither workspace nor explicit paths are available.
+    Auto-discovers workspace by walking up from this file's location. An
+    explicit source/output pair needs no workspace. Returns an error string
+    when neither a workspace nor the explicit pair is available.
     """
     resolved_workspace = workspace or find_workspace_root(
         Path(__file__).resolve().parent,
@@ -410,11 +413,55 @@ def dispatch_mode(mode: PipelineMode, verdandi: Path, output: Path) -> int:
             return run_fragments(verdandi, output)
 
 
-def run_pipeline(args: PipelineArgs) -> int:
-    """Top-level pipeline entry: resolve context then dispatch to mode handler."""
+def run_target(args: PipelineArgs) -> int:
+    """Run one target: resolve its context then dispatch to the mode handler."""
     context = resolve_context(args)
     if isinstance(context, str):
         sys.stderr.write(context + "\n")
         return 1
     verdandi, output = context_to_paths(context)
     return dispatch_mode(context.mode, verdandi, output)
+
+
+def all_project_targets(args: PipelineArgs) -> list[PipelineArgs] | str:
+    """One target per Verdandi project under the workspace root.
+
+    Returns an error string when the workspace cannot be found or holds no
+    project: an invocation that would compile nothing is a failure.
+    """
+    workspace = optional_path(args.workspace) or find_workspace_root(
+        Path(__file__).resolve().parent,
+    )
+    if workspace is None:
+        return (
+            "error: cannot find workspace root (no ancestor has verdandi/)\n"
+            "  use --workspace, or --project, or both --verdandi-dir and --output-dir"
+        )
+    names = list_projects(workspace / "verdandi")
+    if not names:
+        return f"error: no Verdandi project found under {workspace / 'verdandi'}"
+    return [args.model_copy(update={"project": name}) for name in names]
+
+
+def pipeline_targets(args: PipelineArgs) -> list[PipelineArgs] | str:
+    """What one invocation compiles.
+
+    A named project or an explicit source/output directory pair is one
+    target. With neither, every project under the workspace is a target.
+    One directory of the pair without the other names no target.
+    """
+    explicit_dirs = [args.verdandi_dir, args.output_dir]
+    if args.project or all(explicit_dirs):
+        return [args]
+    if any(explicit_dirs):
+        return "error: give --verdandi-dir and --output-dir together, or with --project"
+    return all_project_targets(args)
+
+
+def run_pipeline(args: PipelineArgs) -> int:
+    """Top-level pipeline entry: run every target, return the worst exit code."""
+    targets = pipeline_targets(args)
+    if isinstance(targets, str):
+        sys.stderr.write(targets + "\n")
+        return 1
+    return max(run_target(target) for target in targets)

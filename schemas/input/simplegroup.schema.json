@@ -391,5 +391,7 @@
     "title",
     "description"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "minProperties": 3,
+  "$comment": "At least one of required, optional or conditional: the object is closed and its only keys are title and description (both required) and its three zones, so three keys or more means at least one zone. Adding a key to this level changes the count."
 }

@@ -652,5 +652,7 @@
     "title",
     "description"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "minProperties": 3,
+  "$comment": "At least one of fields or containers: the object is closed and its only keys are title and description (both required) and its two sections, so three keys or more means at least one section. Adding a key to this level changes the count."
 }

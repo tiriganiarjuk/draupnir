@@ -1,7 +1,8 @@
 """Locate Draupnir's own files — the one place the project root is worked out.
 
-CC=1. The root is found from this file's own location, because schemas/ and
-tools/ are siblings of the installed package rather than inside it. Each entry
+CC=1. The root is found from this file's own location, because schemas/ is a
+sibling of the installed package rather than inside it. Nornir's
+tool schemas are found beside it, in the sibling nornir/ repository. Each entry
 point calls this once and passes the result down.
 """
 
@@ -17,6 +18,7 @@ def locate_draupnir_paths() -> DraupnirPaths:
         root=str(root),
         input_schema_dir=str(root / "schemas" / "input"),
         config_schema_dir=str(root / "schemas" / "config"),
-        codegen_config_file=str(root / "tools" / "codegen_input.toml"),
-        structures_dir=str(root / "src" / "draupnir" / "structure"),
+        input_models_dir=str(root / "src" / "draupnir" / "structure" / "gen" / "input"),
+        tool_models_dir=str(root / "src" / "draupnir" / "structure" / "gen" / "tools"),
+        nornir_tool_schema_dir=str(root.parent / "nornir" / "schemas" / "tools"),
     )

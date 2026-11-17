@@ -13,5 +13,4 @@ class DraupnirSchemas(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     json_schema_document: str = "json-schema-document"
-    codegen_input: str = "codegen-input"
     verdandi_manifest: str = "verdandi-manifest"

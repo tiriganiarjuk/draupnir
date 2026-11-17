@@ -15,5 +15,6 @@ class DraupnirPaths(BaseModel):
     root: str
     input_schema_dir: str
     config_schema_dir: str
-    codegen_config_file: str
-    structures_dir: str
+    input_models_dir: str
+    tool_models_dir: str
+    nornir_tool_schema_dir: str

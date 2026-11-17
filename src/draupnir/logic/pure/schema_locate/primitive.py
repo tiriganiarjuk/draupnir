@@ -29,14 +29,6 @@ def json_schema_document_schema(paths: DraupnirPaths) -> SchemaLocation:
     )
 
 
-def codegen_input_schema(paths: DraupnirPaths) -> SchemaLocation:
-    """The schema tools/codegen_input.toml is read against."""
-    return SchemaLocation(
-        name=DraupnirSchemas().codegen_input,
-        directory=paths.config_schema_dir,
-    )
-
-
 def verdandi_manifest_schema(paths: DraupnirPaths) -> SchemaLocation:
     """The schema a project's swept manifest is written and read against."""
     return SchemaLocation(

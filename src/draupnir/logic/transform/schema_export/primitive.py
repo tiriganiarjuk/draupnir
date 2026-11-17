@@ -4,7 +4,13 @@ CC=1. Leaf functions for identifying level refs and building
 replacement nodes. No branching, no iteration.
 """
 
+from draupnir.structure.config.verdandi_manifest import VerdandiManifest
 from draupnir.structure.model.json_schema_node import JsonSchemaNode
+
+
+def manifest_schema_node() -> JsonSchemaNode:
+    """The manifest's schema, exported from the VerdandiManifest model it validates."""
+    return JsonSchemaNode.model_validate(VerdandiManifest.model_json_schema())
 
 
 def is_level_name(def_name: str, level_names: frozenset[str]) -> bool:

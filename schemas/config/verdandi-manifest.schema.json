@@ -1,0 +1,68 @@
+{
+  "title": "VerdandiManifest",
+  "type": "object",
+  "description": "Every Verdandi file one project can reference, as swept from its source and core's.\n\nA file is a reference target only once a sweep has listed it here. The\ntype-tier levels are listed from core.",
+  "$defs": {
+    "LevelName": {
+      "title": "LevelName",
+      "type": "string",
+      "enum": [
+        "pattern",
+        "enum",
+        "atom",
+        "element",
+        "tuple",
+        "union",
+        "field",
+        "simplearray",
+        "simplegroup",
+        "array",
+        "group",
+        "superarray",
+        "section",
+        "shallowsection",
+        "schema"
+      ]
+    },
+    "ManifestEntry": {
+      "title": "ManifestEntry",
+      "type": "object",
+      "description": "One Verdandi file: its level directory and its file name without .yaml.",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/LevelName"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]*$"
+        }
+      },
+      "required": [
+        "level",
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "properties": {
+    "project": {
+      "title": "Project",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "entries": {
+      "title": "Entries",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ManifestEntry"
+      },
+      "uniqueItems": true
+    }
+  },
+  "required": [
+    "project",
+    "entries"
+  ],
+  "additionalProperties": false
+}

@@ -11,14 +11,10 @@ import sys
 from pathlib import Path
 
 from draupnir.logic.impure.codegen_config.simple import load_codegen_config
-from draupnir.logic.impure.loader.primitive import config_schema_dir_path
+from draupnir.logic.impure.paths_locate.primitive import locate_draupnir_paths
 from draupnir.logic.pure.refusal_format.primitive import refusal_text
+from draupnir.structure.config.draupnir_paths import DraupnirPaths
 from draupnir.structure.model.tool_outcome import ToolRefusal
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent.parent
-SCHEMAS_DIR = PROJECT_ROOT / "schemas" / "input"
-STRUCTURES_DIR = PROJECT_ROOT / "src" / "draupnir" / "structure"
-CONFIG_PATH = PROJECT_ROOT / "tools" / "codegen_input.toml"
 
 
 def generate_one_model(schema_path: Path, output_path: Path) -> bool:
@@ -53,23 +49,24 @@ def run_codegen() -> int:
 
     A refused config read generates nothing and returns 1.
     """
-    config = load_codegen_config(CONFIG_PATH, Path(config_schema_dir_path()))
+    paths = locate_draupnir_paths()
+    config = load_codegen_config(paths)
     if isinstance(config, ToolRefusal):
-        sys.stderr.write(f"CONFIG ERROR: {CONFIG_PATH}: {refusal_text(config)}\n")
+        sys.stderr.write(f"CONFIG ERROR: {paths.codegen_config_file}: {refusal_text(config)}\n")
         return 1
-    return generate_all_models(config.levels)
+    return generate_all_models(config.levels, paths)
 
 
-def generate_all_models(all_schemas: dict[str, str]) -> int:
+def generate_all_models(all_schemas: dict[str, str], paths: DraupnirPaths) -> int:
     """Run the generator for each schema-name → module-name pair; 1 if any failed."""
     success = 0
     failed = 0
     for schema_name, module_name in all_schemas.items():
-        schema_path = SCHEMAS_DIR / f"{schema_name}.schema.json"
+        schema_path = Path(paths.input_schema_dir) / f"{schema_name}.schema.json"
         if not schema_path.exists():
             sys.stdout.write(f"  SKIP: {schema_name} (schema not found)\n")
             continue
-        output_path = STRUCTURES_DIR / f"{module_name}.py"
+        output_path = Path(paths.structures_dir) / f"{module_name}.py"
         if generate_one_model(schema_path, output_path):
             sys.stdout.write(f"  {schema_name} -> {module_name}.py\n")
             success += 1

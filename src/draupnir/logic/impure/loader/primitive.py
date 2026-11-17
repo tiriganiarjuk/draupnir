@@ -1,56 +1,15 @@
-"""Loader primitives — filesystem path construction.
+"""Loader primitives — Verdandi file path construction.
 
-CC=1 helpers. Build paths for Verdandi YAML files and the input schema
-directory. The schema directory path uses __file__ traversal rather than
-package resources because the schemas/ directory is a sibling of the
-installed package, not inside it.
+CC=1. Verdandi organizes files by level: root/level_name/name.yaml. Joining
+names needs no disk, so the path is a PurePath.
 """
 
-from pathlib import Path
-
-from draupnir.structure.config.schema_location import SchemaLocation
+from pathlib import PurePath
 
 
-def level_file_path(root: Path, level_name: str, name: str) -> Path:
-    """Build the filesystem path for a Verdandi YAML file.
+def level_file_path(root: PurePath, level_name: str, name: str) -> PurePath:
+    """Build the path of a Verdandi YAML file.
 
-    Verdandi organizes files by level: root/level_name/name.yaml.
     Level names match the Level enum (pattern, atom, element, etc.).
     """
     return root / level_name / f"{name}.yaml"
-
-
-def project_root() -> Path:
-    """The draupnir project root.
-
-    Traverses up from this file (6 parents: this file → loader → impure →
-    logic → draupnir → src → project root). Used because the schemas/
-    directory is a sibling of the installed package, not inside it.
-    """
-    return Path(__file__).resolve().parent.parent.parent.parent.parent.parent
-
-
-def schema_dir_path() -> str:
-    """Return the path to the input schema directory (schemas/input/).
-
-    These schemas are used by the Rust reader for YAML validation before
-    Python model parsing.
-    """
-    return str(project_root() / "schemas" / "input")
-
-
-def config_schema_dir_path() -> str:
-    """Return the path to the hand-written config schema directory (schemas/config/).
-
-    These schemas validate draupnir's own TOML configuration files through
-    the Rust readers before Python model parsing.
-    """
-    return str(project_root() / "schemas" / "config")
-
-
-def json_schema_document_schema() -> SchemaLocation:
-    """The schema every schema file is written and read against: a JSON Schema document."""
-    return SchemaLocation(
-        name="json-schema-document",
-        directory=str(project_root() / "schemas" / "config"),
-    )

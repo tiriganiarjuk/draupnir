@@ -28,6 +28,7 @@ import networkx as nx
 from pydantic import BaseModel
 
 from draupnir.logic.impure.loader.composed import load_all_levels
+from draupnir.logic.impure.paths_locate.primitive import locate_draupnir_paths
 from draupnir.logic.impure.pipeline.composed import check_schema_drift
 from draupnir.logic.pure.serialize.simple import named_documents
 from draupnir.logic.impure.pipeline.simple import (
@@ -54,11 +55,13 @@ from draupnir.logic.pure.graph_build.composed import (
 )
 from draupnir.logic.pure.graph_build.primitive import cache_key_to_defs_key
 from draupnir.logic.pure.graph_build.simple import schema_shared_keys
+from draupnir.logic.pure.schema_locate.primitive import json_schema_document_schema
 from draupnir.logic.orchestrate.compile.dispatch import BUILDER_DISPATCH
 from draupnir.logic.transform.schema_assembly.assembled import assemble_schema
 from draupnir.logic.transform.schema_assembly.composed import assemble_fragment
 from draupnir.logic.transform.schema_build.composed import resolve_array_constraints
 from draupnir.structure.config.build_context import BuildContext
+from draupnir.structure.config.draupnir_paths import DraupnirPaths
 from draupnir.structure.config.fragments import Fragment
 from draupnir.structure.config.pipeline import PipelineArgs, PipelineContext, PipelineMode
 from draupnir.structure.model.schema_output import (
@@ -224,6 +227,7 @@ def export_fragments(
 
 def load_and_build_graph(
     verdandi_root: Path,
+    paths: DraupnirPaths,
 ) -> nx.DiGraph | str:
     """Load all Verdandi YAML levels into cache, then build the dependency graph.
 
@@ -232,7 +236,7 @@ def load_and_build_graph(
     (missing files, validation failures) while keeping the caller simple.
     """
     cache: dict[str, BaseModel] = {}
-    errors = load_all_levels(verdandi_root, cache)
+    errors = load_all_levels(verdandi_root, cache, paths.input_schema_dir)
     if errors:
         return "\n".join(errors)
     graph = build_graph(cache)
@@ -249,6 +253,7 @@ def load_and_build_graph(
 def run_generate(
     verdandi_root: Path,
     output_dir: Path,
+    paths: DraupnirPaths,
 ) -> int:
     """Full generation pipeline: load → graph → compile → assemble → write.
 
@@ -256,14 +261,14 @@ def run_generate(
     the output directory. Fragment filenames use hyphens (underscores
     replaced) to match the established naming convention.
     """
-    result = load_and_build_graph(verdandi_root)
+    result = load_and_build_graph(verdandi_root, paths)
     if isinstance(result, str):
         sys.stderr.write(result + "\n")
         return 1
     schemas = export_all_schemas(result)
     fragments = export_fragments(result)
     documents = named_documents(schemas, fragments)
-    errors = write_schemas(documents, output_dir)
+    errors = write_schemas(documents, output_dir, json_schema_document_schema(paths))
     if errors:
         sys.stderr.write("\n".join(errors) + "\n")
         return 1
@@ -276,18 +281,19 @@ def run_generate(
 def run_check(
     verdandi_root: Path,
     output_dir: Path,
+    paths: DraupnirPaths,
 ) -> int:
     """Drift check: compile schemas in memory and compare against on-disk files.
 
     Returns 0 if all on-disk schemas match compiled output, 1 if any
     differ or are missing. Used by CI to detect stale schema files.
     """
-    result = load_and_build_graph(verdandi_root)
+    result = load_and_build_graph(verdandi_root, paths)
     if isinstance(result, str):
         sys.stderr.write(result + "\n")
         return 1
     documents = named_documents(export_all_schemas(result), export_fragments(result))
-    messages = check_schema_drift(documents, output_dir)
+    messages = check_schema_drift(documents, output_dir, json_schema_document_schema(paths))
     for message in messages:
         sys.stderr.write(message + "\n")
     return 1 if messages else 0
@@ -296,13 +302,17 @@ def run_check(
 def run_fragments(
     verdandi_root: Path,
     output_dir: Path,
+    paths: DraupnirPaths,
 ) -> int:
     """Fragment-only generation: skip full schemas, write only include files."""
-    result = load_and_build_graph(verdandi_root)
+    result = load_and_build_graph(verdandi_root, paths)
     if isinstance(result, str):
         sys.stderr.write(result + "\n")
         return 1
-    errors = write_schemas(named_documents({}, export_fragments(result)), output_dir)
+    errors = write_schemas(
+        named_documents({}, export_fragments(result)), output_dir,
+        json_schema_document_schema(paths),
+    )
     if errors:
         sys.stderr.write("\n".join(errors) + "\n")
         return 1
@@ -312,6 +322,7 @@ def run_fragments(
 def run_list(
     verdandi_root: Path,
     output_dir: Path,
+    paths: DraupnirPaths,
 ) -> int:
     """List available schema names from the Verdandi source directory.
 
@@ -319,7 +330,7 @@ def run_list(
     output_dir is accepted for signature compatibility but not used.
     """
     cache: dict[str, BaseModel] = {}
-    errors = load_all_levels(verdandi_root, cache)
+    errors = load_all_levels(verdandi_root, cache, paths.input_schema_dir)
     if errors:
         sys.stderr.write("\n".join(errors) + "\n")
         return 1
@@ -399,27 +410,29 @@ def resolve_context(args: PipelineArgs) -> PipelineContext | str:
     )
 
 
-def dispatch_mode(mode: PipelineMode, verdandi: Path, output: Path) -> int:
+def dispatch_mode(
+    mode: PipelineMode, verdandi: Path, output: Path, paths: DraupnirPaths,
+) -> int:
     """Route a resolved pipeline mode to its handler function."""
     match mode:
         case PipelineMode.generate:
-            return run_generate(verdandi, output)
+            return run_generate(verdandi, output, paths)
         case PipelineMode.check:
-            return run_check(verdandi, output)
+            return run_check(verdandi, output, paths)
         case PipelineMode.list_schemas:
-            return run_list(verdandi, output)
+            return run_list(verdandi, output, paths)
         case PipelineMode.fragments:
-            return run_fragments(verdandi, output)
+            return run_fragments(verdandi, output, paths)
 
 
-def run_target(args: PipelineArgs) -> int:
+def run_target(args: PipelineArgs, paths: DraupnirPaths) -> int:
     """Run one target: resolve its context then dispatch to the mode handler."""
     context = resolve_context(args)
     if isinstance(context, str):
         sys.stderr.write(context + "\n")
         return 1
     verdandi, output = context_to_paths(context)
-    return dispatch_mode(context.mode, verdandi, output)
+    return dispatch_mode(context.mode, verdandi, output, paths)
 
 
 def all_project_targets(args: PipelineArgs) -> list[PipelineArgs] | str:
@@ -458,9 +471,13 @@ def pipeline_targets(args: PipelineArgs) -> list[PipelineArgs] | str:
 
 
 def run_pipeline(args: PipelineArgs) -> int:
-    """Top-level pipeline entry: run every target, return the worst exit code."""
+    """Top-level pipeline entry: run every target, return the worst exit code.
+
+    Draupnir's own locations are worked out here, once, and passed down.
+    """
     targets = pipeline_targets(args)
     if isinstance(targets, str):
         sys.stderr.write(targets + "\n")
         return 1
-    return max(run_target(target) for target in targets)
+    paths = locate_draupnir_paths()
+    return max(run_target(target, paths) for target in targets)

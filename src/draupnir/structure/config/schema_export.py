@@ -8,6 +8,17 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict
 
+from draupnir.structure.model.json_schema_node import JsonSchemaNode
+
+
+class ExportedSchema(BaseModel):
+    """One schema the export writes: its node, and the file it is written to."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    node: JsonSchemaNode
+    path: str
+
 
 class ExactlyOneConstraintModel(StrEnum):
     """Models requiring oneOf constraint: exactly one conditional keyword present."""

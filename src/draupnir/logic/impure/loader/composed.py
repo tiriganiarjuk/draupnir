@@ -15,7 +15,6 @@ from pathlib import Path
 
 from pydantic import BaseModel, ValidationError
 
-from draupnir.logic.impure.loader.primitive import schema_dir_path
 from draupnir.logic.impure.loader.simple import load_one
 from draupnir.logic.pure.refusal_format.primitive import refusal_text
 from draupnir.structure.config.levels import Level
@@ -23,7 +22,7 @@ from draupnir.structure.model.tool_outcome import ToolRefusal
 
 
 def load_all_levels(
-    root: Path, cache: dict[str, BaseModel],
+    root: Path, cache: dict[str, BaseModel], schema_dir: str,
 ) -> list[str]:
     """Populate cache with all Verdandi YAML files, bottom-up by level.
 
@@ -34,9 +33,10 @@ def load_all_levels(
     each leave it out and add an error. A root that yields no files at all
     is an error too.
 
-    Returns a list of error messages (empty on success). The caller reports them.
+    schema_dir is the directory holding the level input schemas the reader
+    validates each file against. Returns a list of error messages (empty on
+    success). The caller reports them.
     """
-    schema_dir = schema_dir_path()
     errors: list[str] = []
     for level in Level:
         level_dir = root / level.name

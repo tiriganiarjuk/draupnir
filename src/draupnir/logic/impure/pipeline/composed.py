@@ -9,12 +9,12 @@ check_schema_drift: compares freshly compiled documents against what is on
   document, and compared with the compiled document as JSON values.
 """
 
-from pathlib import Path
+from pathlib import PurePath
 
-from draupnir.logic.impure.loader.primitive import json_schema_document_schema
 from draupnir.logic.impure.pipeline.ffi import read_json_text
 from draupnir.logic.pure.refusal_format.primitive import refusal_text
 from draupnir.logic.pure.serialize.primitive import serialize_schema
+from draupnir.structure.config.schema_location import SchemaLocation
 from draupnir.structure.model.json_document import JsonDocument
 from draupnir.structure.model.schema_output import FragmentDocument, SchemaDocument
 from draupnir.structure.model.tool_outcome import ToolRefusal
@@ -22,7 +22,8 @@ from draupnir.structure.model.tool_outcome import ToolRefusal
 
 def check_schema_drift(
     documents: dict[str, SchemaDocument | FragmentDocument],
-    output_dir: Path,
+    output_dir: PurePath,
+    schema: SchemaLocation,
 ) -> list[str]:
     """Compare compiled documents against on-disk files. Returns list of drift messages.
 
@@ -30,7 +31,6 @@ def check_schema_drift(
     it (absent, not JSON, not a JSON Schema document), `drifted` when it
     holds a different JSON value from the compiled document.
     """
-    schema = json_schema_document_schema()
     messages: list[str] = []
     for filename, document in documents.items():
         path = output_dir / filename

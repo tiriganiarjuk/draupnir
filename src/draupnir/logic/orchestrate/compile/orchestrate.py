@@ -30,6 +30,10 @@ from pydantic import BaseModel
 from draupnir.logic.impure.loader.composed import load_all_levels
 from draupnir.logic.impure.paths_locate.primitive import locate_draupnir_paths
 from draupnir.logic.impure.pipeline.composed import check_schema_drift
+from draupnir.logic.impure.source_sweep.assembled import sweep_source_files
+from draupnir.logic.pure.refusal_format.primitive import refusal_text
+from draupnir.logic.pure.source_files.simple import stray_files_text
+from draupnir.logic.transform.manifest_build.simple import build_manifest
 from draupnir.logic.pure.serialize.simple import named_documents
 from draupnir.logic.impure.pipeline.simple import (
     args_to_paths,
@@ -64,6 +68,8 @@ from draupnir.structure.config.build_context import BuildContext
 from draupnir.structure.config.draupnir_paths import DraupnirPaths
 from draupnir.structure.config.fragments import Fragment
 from draupnir.structure.config.pipeline import PipelineArgs, PipelineContext, PipelineMode
+from draupnir.structure.config.verdandi_manifest import VerdandiLayout, VerdandiManifest
+from draupnir.structure.model.tool_outcome import ToolRefusal
 from draupnir.structure.model.schema_output import (
     FragmentDocument,
     SchemaDocument,
@@ -225,18 +231,35 @@ def export_fragments(
 # --- Pipeline modes ---
 
 
+def sweep_manifest(verdandi_root: Path) -> VerdandiManifest | str:
+    """Sweep a project's source tree into its manifest, or an error string.
+
+    The listing follows the project's links into core. A refused listing, or a
+    file that is not a Verdandi file, stops the target.
+    """
+    files = sweep_source_files(verdandi_root, VerdandiLayout())
+    if isinstance(files, ToolRefusal):
+        return refusal_text(files)
+    if files.strays:
+        return stray_files_text(verdandi_root, files)
+    return build_manifest(verdandi_root.parent.name, files)
+
+
 def load_and_build_graph(
     verdandi_root: Path,
+    manifest: VerdandiManifest,
     paths: DraupnirPaths,
 ) -> nx.DiGraph | str:
-    """Load all Verdandi YAML levels into cache, then build the dependency graph.
+    """Load every file the manifest names into cache, then build the dependency graph.
 
     Returns the DiGraph on success or an error string on load failure.
     The string-or-graph return type avoids exceptions for expected errors
     (missing files, validation failures) while keeping the caller simple.
     """
     cache: dict[str, BaseModel] = {}
-    errors = load_all_levels(verdandi_root, cache, paths.input_schema_dir)
+    errors = load_all_levels(
+        verdandi_root, manifest, VerdandiLayout(), cache, paths.input_schema_dir,
+    )
     if errors:
         return "\n".join(errors)
     graph = build_graph(cache)
@@ -254,6 +277,7 @@ def run_generate(
     verdandi_root: Path,
     output_dir: Path,
     paths: DraupnirPaths,
+    manifest: VerdandiManifest,
 ) -> int:
     """Full generation pipeline: load → graph → compile → assemble → write.
 
@@ -261,7 +285,7 @@ def run_generate(
     the output directory. Fragment filenames use hyphens (underscores
     replaced) to match the established naming convention.
     """
-    result = load_and_build_graph(verdandi_root, paths)
+    result = load_and_build_graph(verdandi_root, manifest, paths)
     if isinstance(result, str):
         sys.stderr.write(result + "\n")
         return 1
@@ -282,13 +306,14 @@ def run_check(
     verdandi_root: Path,
     output_dir: Path,
     paths: DraupnirPaths,
+    manifest: VerdandiManifest,
 ) -> int:
     """Drift check: compile schemas in memory and compare against on-disk files.
 
     Returns 0 if all on-disk schemas match compiled output, 1 if any
     differ or are missing. Used by CI to detect stale schema files.
     """
-    result = load_and_build_graph(verdandi_root, paths)
+    result = load_and_build_graph(verdandi_root, manifest, paths)
     if isinstance(result, str):
         sys.stderr.write(result + "\n")
         return 1
@@ -303,9 +328,10 @@ def run_fragments(
     verdandi_root: Path,
     output_dir: Path,
     paths: DraupnirPaths,
+    manifest: VerdandiManifest,
 ) -> int:
     """Fragment-only generation: skip full schemas, write only include files."""
-    result = load_and_build_graph(verdandi_root, paths)
+    result = load_and_build_graph(verdandi_root, manifest, paths)
     if isinstance(result, str):
         sys.stderr.write(result + "\n")
         return 1
@@ -323,6 +349,7 @@ def run_list(
     verdandi_root: Path,
     output_dir: Path,
     paths: DraupnirPaths,
+    manifest: VerdandiManifest,
 ) -> int:
     """List available schema names from the Verdandi source directory.
 
@@ -330,7 +357,9 @@ def run_list(
     output_dir is accepted for signature compatibility but not used.
     """
     cache: dict[str, BaseModel] = {}
-    errors = load_all_levels(verdandi_root, cache, paths.input_schema_dir)
+    errors = load_all_levels(
+        verdandi_root, manifest, VerdandiLayout(), cache, paths.input_schema_dir,
+    )
     if errors:
         sys.stderr.write("\n".join(errors) + "\n")
         return 1
@@ -411,28 +440,36 @@ def resolve_context(args: PipelineArgs) -> PipelineContext | str:
 
 
 def dispatch_mode(
-    mode: PipelineMode, verdandi: Path, output: Path, paths: DraupnirPaths,
+    mode: PipelineMode,
+    verdandi: Path,
+    output: Path,
+    paths: DraupnirPaths,
+    manifest: VerdandiManifest,
 ) -> int:
     """Route a resolved pipeline mode to its handler function."""
     match mode:
         case PipelineMode.generate:
-            return run_generate(verdandi, output, paths)
+            return run_generate(verdandi, output, paths, manifest)
         case PipelineMode.check:
-            return run_check(verdandi, output, paths)
+            return run_check(verdandi, output, paths, manifest)
         case PipelineMode.list_schemas:
-            return run_list(verdandi, output, paths)
+            return run_list(verdandi, output, paths, manifest)
         case PipelineMode.fragments:
-            return run_fragments(verdandi, output, paths)
+            return run_fragments(verdandi, output, paths, manifest)
 
 
 def run_target(args: PipelineArgs, paths: DraupnirPaths) -> int:
-    """Run one target: resolve its context then dispatch to the mode handler."""
+    """Run one target: resolve its context, sweep its manifest, dispatch to the mode handler."""
     context = resolve_context(args)
     if isinstance(context, str):
         sys.stderr.write(context + "\n")
         return 1
     verdandi, output = context_to_paths(context)
-    return dispatch_mode(context.mode, verdandi, output, paths)
+    manifest = sweep_manifest(verdandi)
+    if isinstance(manifest, str):
+        sys.stderr.write(manifest + "\n")
+        return 1
+    return dispatch_mode(context.mode, verdandi, output, paths, manifest)
 
 
 def all_project_targets(args: PipelineArgs) -> list[PipelineArgs] | str:

@@ -15,8 +15,30 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field
 
 from draupnir.structure.config.levels import Level
+from draupnir.structure.gen.tools.directory_listing import Entry
 
 LevelName = StrEnum("LevelName", [level.name for level in Level])
+
+
+class VerdandiLayout(BaseModel):
+    """How a Verdandi source tree lays out its files: {level}/{name}{file_suffix}."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    file_suffix: str = ".yaml"
+
+
+class SweptFiles(BaseModel):
+    """A project's source listing, sorted: the Verdandi files, and every file that is not one.
+
+    A Verdandi file sits at {level}/{name}.yaml under a known level. A stray is any
+    other file; a sweep that finds one refuses, naming every stray.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    level_files: tuple[Entry, ...]
+    strays: tuple[Entry, ...]
 
 
 class ManifestEntry(BaseModel):

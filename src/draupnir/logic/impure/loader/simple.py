@@ -15,28 +15,29 @@ wrappers for all ref fields, so downstream code accesses cache keys via
 .root attribute access.
 """
 
-from pathlib import Path
+from pathlib import PurePath
 
 from pydantic import BaseModel
 
 from draupnir.logic.impure.loader.ffi import gate_validate
 from draupnir.logic.impure.loader.primitive import level_file_path
 from draupnir.structure.config.input_models import InputLevel
+from draupnir.structure.config.verdandi_manifest import ManifestEntry, VerdandiLayout
 from draupnir.structure.model.tool_outcome import ToolRefusal
 
 
 def load_one(
-    root: Path, level_name: str, name: str, schema_dir: str,
+    root: PurePath, entry: ManifestEntry, layout: VerdandiLayout, schema_dir: str,
 ) -> BaseModel | ToolRefusal:
-    """Load a single Verdandi YAML file via gate into a generated input model.
+    """Load the Verdandi file one manifest entry names, via gate, into a generated input model.
 
     Returns the input model, or the gate's ToolRefusal when the file was
     refused. model_validate_json parses directly from the validated JSON
     string the success carries.
     """
-    file_path = str(level_file_path(root, level_name, name))
-    outcome = gate_validate(file_path, level_name, schema_dir)
+    file_path = str(level_file_path(root, entry, layout))
+    outcome = gate_validate(file_path, entry.level, schema_dir)
     if isinstance(outcome, ToolRefusal):
         return outcome
-    model_class = InputLevel[level_name].value
+    model_class = InputLevel[entry.level].value
     return model_class.model_validate_json(outcome.data)

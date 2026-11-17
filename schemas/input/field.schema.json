@@ -4,10 +4,12 @@
   "description": "Semantic membrane: type reference + description + extensions.",
   "$defs": {
     "Atom": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(atom)/[a-z0-9][a-z0-9_-]*$"
     },
     "AtomOrEnumRef": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(enum|atom)/[a-z0-9][a-z0-9_-]*$"
     },
     "ConstraintRule": {
       "title": "ConstraintRule",
@@ -70,25 +72,32 @@
         "rule",
         "severity",
         "reason"
-      ]
+      ],
+      "additionalProperties": false
     },
     "Element": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(element)/[a-z0-9][a-z0-9_-]*$"
     },
     "Enum": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(enum)/[a-z0-9][a-z0-9_-]*$"
     },
     "FieldRef": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(pattern|enum|atom|element|tuple|union)/[a-z0-9][a-z0-9_-]*$"
     },
     "FieldTypeRef": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(enum|atom|element|tuple|union)/[a-z0-9][a-z0-9_-]*$"
     },
     "Pattern": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(pattern)/[a-z0-9][a-z0-9_-]*$"
     },
     "PatternRef": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(pattern)/[a-z0-9][a-z0-9_-]*$"
     },
     "SemanticBlock": {
       "title": "SemanticBlock",
@@ -149,16 +158,20 @@
           ],
           "default": null
         }
-      }
+      },
+      "additionalProperties": false
     },
     "Tuple_": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(tuple)/[a-z0-9][a-z0-9_-]*$"
     },
     "UnionMemberRef": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(enum|atom|element|tuple)/[a-z0-9][a-z0-9_-]*$"
     },
     "Union_": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(union)/[a-z0-9][a-z0-9_-]*$"
     }
   },
   "properties": {
@@ -264,5 +277,6 @@
     "title",
     "type",
     "description"
-  ]
+  ],
+  "additionalProperties": false
 }

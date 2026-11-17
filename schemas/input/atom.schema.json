@@ -4,7 +4,8 @@
   "description": "Constrained base type: string, integer, or boolean.",
   "$defs": {
     "PatternRef": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(pattern)/[a-z0-9][a-z0-9_-]*$"
     }
   },
   "properties": {
@@ -80,5 +81,6 @@
     "title",
     "type",
     "description"
-  ]
+  ],
+  "additionalProperties": false
 }

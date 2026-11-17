@@ -4,7 +4,8 @@
   "description": "Root schema — references sections or shallowsections via zones.",
   "$defs": {
     "Array": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(array)/[a-z0-9][a-z0-9_-]*$"
     },
     "ArrayOneOf": {
       "title": "ArrayOneOf",
@@ -33,16 +34,20 @@
       },
       "required": [
         "oneOf"
-      ]
+      ],
+      "additionalProperties": false
     },
     "Atom": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(atom)/[a-z0-9][a-z0-9_-]*$"
     },
     "AtomOrEnumRef": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(enum|atom)/[a-z0-9][a-z0-9_-]*$"
     },
     "ComplexContainerRef": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(array|group|superarray)/[a-z0-9][a-z0-9_-]*$"
     },
     "ConditionalWhen": {
       "title": "ConditionalWhen",
@@ -119,7 +124,8 @@
             "exists"
           ]
         }
-      ]
+      ],
+      "additionalProperties": false
     },
     "ConstraintRule": {
       "title": "ConstraintRule",
@@ -182,25 +188,32 @@
         "rule",
         "severity",
         "reason"
-      ]
+      ],
+      "additionalProperties": false
     },
     "Element": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(element)/[a-z0-9][a-z0-9_-]*$"
     },
     "Enum": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(enum)/[a-z0-9][a-z0-9_-]*$"
     },
     "FieldItemRef": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(field)/[a-z0-9][a-z0-9_-]*$"
     },
     "FieldRef": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(pattern|enum|atom|element|tuple|union)/[a-z0-9][a-z0-9_-]*$"
     },
     "FieldTypeRef": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(enum|atom|element|tuple|union)/[a-z0-9][a-z0-9_-]*$"
     },
     "Group": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(group)/[a-z0-9][a-z0-9_-]*$"
     },
     "GroupContainerConditionalEntry": {
       "title": "GroupContainerConditionalEntry",
@@ -263,10 +276,12 @@
             "not_when"
           ]
         }
-      ]
+      ],
+      "additionalProperties": false
     },
     "GroupContainerRef": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(simplearray|simplegroup|array)/[a-z0-9][a-z0-9_-]*$"
     },
     "GroupContainers": {
       "title": "GroupContainers",
@@ -318,7 +333,8 @@
           ],
           "default": null
         }
-      }
+      },
+      "additionalProperties": false
     },
     "GroupFieldConditionalEntry": {
       "title": "GroupFieldConditionalEntry",
@@ -381,10 +397,12 @@
             "not_when"
           ]
         }
-      ]
+      ],
+      "additionalProperties": false
     },
     "GroupFieldConditionalRef": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(field)/[a-z0-9][a-z0-9_-]*$"
     },
     "GroupFields": {
       "title": "GroupFields",
@@ -436,16 +454,20 @@
           ],
           "default": null
         }
-      }
+      },
+      "additionalProperties": false
     },
     "GroupOrSimplegroupRef": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(simplegroup|group)/[a-z0-9][a-z0-9_-]*$"
     },
     "Pattern": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(pattern)/[a-z0-9][a-z0-9_-]*$"
     },
     "PatternRef": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(pattern)/[a-z0-9][a-z0-9_-]*$"
     },
     "SchemaSectionConditionalEntry": {
       "title": "SchemaSectionConditionalEntry",
@@ -508,7 +530,8 @@
             "not_when"
           ]
         }
-      ]
+      ],
+      "additionalProperties": false
     },
     "SchemaSections": {
       "title": "SchemaSections",
@@ -560,7 +583,8 @@
           ],
           "default": null
         }
-      }
+      },
+      "additionalProperties": false
     },
     "SchemaShallowConditionalEntry": {
       "title": "SchemaShallowConditionalEntry",
@@ -623,7 +647,8 @@
             "not_when"
           ]
         }
-      ]
+      ],
+      "additionalProperties": false
     },
     "SchemaShallowsections": {
       "title": "SchemaShallowsections",
@@ -675,7 +700,8 @@
           ],
           "default": null
         }
-      }
+      },
+      "additionalProperties": false
     },
     "SectionContainerConditionalEntry": {
       "title": "SectionContainerConditionalEntry",
@@ -738,7 +764,8 @@
             "not_when"
           ]
         }
-      ]
+      ],
+      "additionalProperties": false
     },
     "SectionContainers": {
       "title": "SectionContainers",
@@ -790,10 +817,12 @@
           ],
           "default": null
         }
-      }
+      },
+      "additionalProperties": false
     },
     "SectionOnlyRef": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(section)/[a-z0-9][a-z0-9_-]*$"
     },
     "SemanticBlock": {
       "title": "SemanticBlock",
@@ -854,7 +883,8 @@
           ],
           "default": null
         }
-      }
+      },
+      "additionalProperties": false
     },
     "ShallowContainerConditionalEntry": {
       "title": "ShallowContainerConditionalEntry",
@@ -917,10 +947,12 @@
             "not_when"
           ]
         }
-      ]
+      ],
+      "additionalProperties": false
     },
     "ShallowContainerRef": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(simplearray|simplegroup|array|group|superarray)/[a-z0-9][a-z0-9_-]*$"
     },
     "ShallowContainers": {
       "title": "ShallowContainers",
@@ -972,7 +1004,8 @@
           ],
           "default": null
         }
-      }
+      },
+      "additionalProperties": false
     },
     "ShallowFieldConditionalEntry": {
       "title": "ShallowFieldConditionalEntry",
@@ -1035,10 +1068,12 @@
             "not_when"
           ]
         }
-      ]
+      ],
+      "additionalProperties": false
     },
     "ShallowFieldConditionalRef": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(field)/[a-z0-9][a-z0-9_-]*$"
     },
     "ShallowsectionFields": {
       "title": "ShallowsectionFields",
@@ -1090,16 +1125,20 @@
           ],
           "default": null
         }
-      }
+      },
+      "additionalProperties": false
     },
     "ShallowsectionOnlyRef": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(shallowsection)/[a-z0-9][a-z0-9_-]*$"
     },
     "Simplearray": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(simplearray)/[a-z0-9][a-z0-9_-]*$"
     },
     "Simplegroup": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(simplegroup)/[a-z0-9][a-z0-9_-]*$"
     },
     "SimplegroupConditionalEntry": {
       "title": "SimplegroupConditionalEntry",
@@ -1162,16 +1201,20 @@
             "not_when"
           ]
         }
-      ]
+      ],
+      "additionalProperties": false
     },
     "SimplegroupItemRef": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(field|simplearray)/[a-z0-9][a-z0-9_-]*$"
     },
     "SimplegroupRef": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(simplegroup)/[a-z0-9][a-z0-9_-]*$"
     },
     "Superarray": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(superarray)/[a-z0-9][a-z0-9_-]*$"
     },
     "SuperarrayOneOf": {
       "title": "SuperarrayOneOf",
@@ -1200,19 +1243,24 @@
       },
       "required": [
         "oneOf"
-      ]
+      ],
+      "additionalProperties": false
     },
     "Tuple_": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(tuple)/[a-z0-9][a-z0-9_-]*$"
     },
     "UnionMemberRef": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(enum|atom|element|tuple)/[a-z0-9][a-z0-9_-]*$"
     },
     "Union_": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(union)/[a-z0-9][a-z0-9_-]*$"
     },
     "VerdandiField": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(field)/[a-z0-9][a-z0-9_-]*$"
     }
   },
   "properties": {
@@ -1255,5 +1303,6 @@
     "title",
     "version",
     "description"
-  ]
+  ],
+  "additionalProperties": false
 }

@@ -4,16 +4,20 @@
   "description": "Atom or Enum with a runtime format contract.",
   "$defs": {
     "Atom": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(atom)/[a-z0-9][a-z0-9_-]*$"
     },
     "AtomOrEnumRef": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(enum|atom)/[a-z0-9][a-z0-9_-]*$"
     },
     "Enum": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(enum)/[a-z0-9][a-z0-9_-]*$"
     },
     "PatternRef": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^(pattern)/[a-z0-9][a-z0-9_-]*$"
     }
   },
   "properties": {
@@ -58,5 +62,6 @@
     "title",
     "inherits",
     "description"
-  ]
+  ],
+  "additionalProperties": false
 }

@@ -31,6 +31,7 @@ from draupnir.logic.impure.loader.composed import load_all_levels
 from draupnir.logic.impure.paths_locate.primitive import locate_draupnir_paths
 from draupnir.logic.impure.pipeline.composed import check_schema_drift
 from draupnir.logic.impure.source_sweep.assembled import sweep_source_files
+from draupnir.logic.pure.composition_check.composed import container_limit_violations
 from draupnir.logic.pure.refusal_format.primitive import refusal_text
 from draupnir.logic.pure.source_files.simple import stray_files_text
 from draupnir.logic.transform.manifest_build.simple import build_manifest
@@ -65,6 +66,7 @@ from draupnir.logic.transform.schema_assembly.assembled import assemble_schema
 from draupnir.logic.transform.schema_assembly.composed import assemble_fragment
 from draupnir.logic.transform.schema_build.composed import resolve_array_constraints
 from draupnir.structure.config.build_context import BuildContext
+from draupnir.structure.config.composition_limits import CompositionLimits
 from draupnir.structure.config.draupnir_paths import DraupnirPaths
 from draupnir.structure.config.fragments import Fragment
 from draupnir.structure.config.pipeline import PipelineArgs, PipelineContext, PipelineMode
@@ -267,7 +269,7 @@ def load_and_build_graph(
         violation
         for node in graph.nodes
         for violation in node_predicate_violations(graph, node)
-    ]
+    ] + container_limit_violations(cache, CompositionLimits())
     if violations:
         return "\n".join(violations)
     return graph

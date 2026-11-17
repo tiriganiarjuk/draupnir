@@ -10,7 +10,7 @@ CC=1-3. The loading pipeline for a single Verdandi YAML file:
 
 The gate step is critical — it catches malformed YAML before Python ever
 sees it, and the JSON Schema validation ensures structural correctness.
-The generated input models (InputLevel enum → model class) have RootModel
+The generated input models (Level enum → model class) have RootModel
 wrappers for all ref fields, so downstream code accesses cache keys via
 .root attribute access.
 """
@@ -21,7 +21,7 @@ from pydantic import BaseModel
 
 from draupnir.logic.impure.loader.ffi import gate_validate
 from draupnir.logic.impure.loader.primitive import level_file_path
-from draupnir.structure.config.input_models import InputLevel
+from draupnir.structure.config.levels import Level
 from draupnir.structure.config.verdandi_manifest import ManifestEntry, VerdandiLayout
 from draupnir.structure.model.tool_outcome import ToolRefusal
 
@@ -39,5 +39,5 @@ def load_one(
     outcome = gate_validate(file_path, entry.level, schema_dir)
     if isinstance(outcome, ToolRefusal):
         return outcome
-    model_class = InputLevel[entry.level].value
+    model_class = Level[entry.level].value
     return model_class.model_validate_json(outcome.data)

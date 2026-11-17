@@ -1,56 +1,45 @@
 """Verdandi composition levels in dependency order.
 
-Declaration order IS the load order. Member values are the Pydantic
-model classes. Iterating yields levels bottom-up: lower tiers first,
-guaranteeing that refs are in cache when higher tiers validate.
-
-This is pure architectural data — the single source of truth for
-level ordering and level-to-model mapping.
+Declaration order IS the load order. Member values are the input models
+generated from schemas/input/{level}.schema.json — the authored source of what
+a Verdandi file at each level may contain. Iterating yields levels bottom-up:
+lower tiers first, so every reference a file names is in the cache when that
+file validates.
 """
 
 import enum
 
-from draupnir.structure.model.complex_containers import (
-    Array,
-    Group,
-    Superarray,
-)
-from draupnir.structure.model.simple_containers import VerdandiField
-from draupnir.structure.model.fields import (
-    Atom,
-    Element,
-)
-from draupnir.structure.model.fields import Enum as VerdandiEnum
-from draupnir.structure.model.fields import (
-    Pattern,
-    Tuple_,
-    Union_,
-)
-from draupnir.structure.model.simple_containers import (
-    Simplearray,
-    Simplegroup,
-)
-from draupnir.structure.model.top_level import (
-    Schema,
-    Section,
-    Shallowsection,
-)
+from draupnir.structure.gen.input.array import Array
+from draupnir.structure.gen.input.atom import Atom
+from draupnir.structure.gen.input.element import Element
+from draupnir.structure.gen.input.enum import Enum
+from draupnir.structure.gen.input.field import VerdandiField
+from draupnir.structure.gen.input.group import Group
+from draupnir.structure.gen.input.pattern import Pattern
+from draupnir.structure.gen.input.schema import Schema
+from draupnir.structure.gen.input.section import Section
+from draupnir.structure.gen.input.shallowsection import Shallowsection
+from draupnir.structure.gen.input.simplearray import Simplearray
+from draupnir.structure.gen.input.simplegroup import Simplegroup
+from draupnir.structure.gen.input.superarray import Superarray
+from draupnir.structure.gen.input.tuple import Tuple
+from draupnir.structure.gen.input.union import Union
 
 
 class Level(enum.Enum):
     """Verdandi composition levels in dependency order.
 
-    Declaration order is the load order. Member values are the Pydantic
-    model classes for that level. Use Level[name] for lookup, level.value
-    for the model class, and iteration for ordered traversal.
+    Declaration order is the load order. Use Level[name] for lookup,
+    level.value for the generated input model, and iteration for ordered
+    traversal.
     """
 
     pattern = Pattern
-    enum = VerdandiEnum
+    enum = Enum
     atom = Atom
     element = Element
-    tuple = Tuple_
-    union = Union_
+    tuple = Tuple
+    union = Union
     field = VerdandiField
     simplearray = Simplearray
     simplegroup = Simplegroup

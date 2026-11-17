@@ -31,7 +31,7 @@ The entire compilation is a linear walk over the topologically sorted graph. Zer
 
 **Typed at the door.** Draupnir imports no YAML parser. A compiled Nornir reader reads each file, validates it against its level's schema, and returns either the validated JSON or a refusal carrying its failure class. A refusal stops the run.
 
-**The self-hosting loop.** The models that define what a Verdandi file may contain are exported as the input schemas the reader validates against, and the input models that parse the reader's output are generated from those same schemas. One definition, two consumers.
+**The self-hosting loop.** The schemas that define what a Verdandi file may contain are authored in `schemas/input/`. The reader validates every Verdandi file against them, and the input models that parse the reader's output are generated from those same schemas. One definition, two consumers. A reference records the levels it may name, so a reference to the wrong level is refused where the file is read.
 
 **Validated on the way out.** Every schema is written by a compiled Nornir writer, which first validates it as a JSON Schema document against the official 2020-12 metaschema it carries compiled in. `--check` reads the files back through a Nornir reader and compares them with what the compiler produces.
 

@@ -49,8 +49,8 @@ The schema compiler: it turns the Verdandi YAML hierarchy into JSON Schema docum
 
 | Need | Read |
 |------|------|
-| what a Verdandi file may contain, as Draupnir models it | `src/draupnir/structure/model/` |
-| how the input schemas are exported and the input models generated | `~/ai/smidja/galdr/context/DRAUPNIR_ELEMENT.md` § The self-hosting loop, then `src/draupnir/logic/transform/schema_export/` |
+| what a Verdandi file may contain | `schemas/input/{level}.schema.json` — the authored source; `src/draupnir/structure/gen/input/` is generated from it |
+| how the input models are generated | `~/ai/smidja/galdr/context/DRAUPNIR_ELEMENT.md` § The self-hosting loop, then `src/draupnir/logic/orchestrate/codegen_models/` |
 | where a function goes / what zone / what level | `THE_LEVEL_SYSTEM.md` |
 | how external data becomes typed / a shape has no model | `HOW_DATA_ENTERS.md` |
 | how to run it / what the flags are | `src/draupnir/cli.py` — the CLI is the truth |

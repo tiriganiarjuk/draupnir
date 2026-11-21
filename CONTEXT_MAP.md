@@ -41,8 +41,6 @@ The schema compiler: it turns the Verdandi YAML hierarchy into JSON Schema docum
 6. `THE_LEVEL_SYSTEM.md` — zones, levels, and the decision procedure for where every piece of code lives. Prerequisite to writing anything.
 7. `HOW_DATA_ENTERS.md` — the boundary: how external data becomes typed, and why unknown data never gets in.
 
-**Proof:** before writing anything, state (a) why recursive descent was abandoned here and what the three attempts to rescue it have in common, (b) what the self-hosting loop makes impossible, and (c) one thing you would have written that this architecture forbids. If you cannot, you are not oriented — go back and read.
-
 ---
 
 ## Refresh guide — want X → read Y

@@ -18,6 +18,8 @@ class NornirToolSchema(StrEnum):
     """
 
     directory_listing = "directory-listing"
+    directory_write_request = "directory-write-request"
+    directory_write_report = "directory-write-report"
 
 
 class ModelTarget(BaseModel):
